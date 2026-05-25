@@ -82,7 +82,7 @@ public class MainActivity extends Activity {
         Intent intent = getIntent();
         String action = intent.getAction();
         Uri data = intent.getData();
-        String url = "https://m.youtube.com/";
+        String url = "https://kannujaat.netlify.app/";
         if (Intent.ACTION_VIEW.equals(action) && data != null) {
             url = data.toString();
         } else if (Intent.ACTION_SEND.equals(action)) {
@@ -153,7 +153,7 @@ public class MainActivity extends Activity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == 101) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                web.loadUrl("https://m.youtube.com");
+                web.loadUrl("https://kannujaat.netlify.app/");
             } else {
                 Toast.makeText(getApplicationContext(), getString(R.string.grant_mic), Toast.LENGTH_SHORT).show();
             }
