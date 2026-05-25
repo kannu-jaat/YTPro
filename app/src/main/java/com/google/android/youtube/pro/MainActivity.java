@@ -8,6 +8,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -54,25 +55,15 @@ public class MainActivity extends Activity {
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
-        // 🛠️ FIX: Sahi Tarike Se Storage/All Files Permission Maangna
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Android 11+ ke liye All Files Access Environment Maangna
-            try {
-                Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-                intent.addCategory("android.intent.category.DEFAULT");
-                intent.setData(Uri.parse(String.format("package:%s", getApplicationContext().getPackageName())));
-                startActivity(intent);
-            } catch (Exception e) {
-                Intent intent = new Intent();
-                intent.setAction(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
-                startActivity(intent);
+        // 🛠️ SMART PERMISSION CHECK (Baar-baar nahi maangega aur Settings page nahi kholega)
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{android.Manifest.permission.READ_MEDIA_AUDIO}, 101);
             }
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // Purane Androids ke liye Normal Storage Permission
-            requestPermissions(new String[]{
-                android.Manifest.permission.READ_EXTERNAL_STORAGE,
-                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-            }, 101);
+            if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE}, 101);
+            }
         }
         
         load(false);
@@ -84,65 +75,75 @@ public class MainActivity extends Activity {
         web = findViewById(R.id.web);
 
         // ---------------------------------------------------------
-        // 🛠️ REAL TOGGLE: ALWAYS DESKTOP MODE + ZOOM LOCK SYSTEM
+        // 🛠️ NEW UI & ZOOM LOGIC: TRANSPARENT BUTTON & LEVEL PRESERVATION
         // ---------------------------------------------------------
-        final android.widget.Button btnZoomToggle = new android.widget.Button(this);
-        btnZoomToggle.setText("LOCK ZOOM");
-        btnZoomToggle.setBackgroundColor(android.graphics.Color.parseColor("#CC000000"));
-        btnZoomToggle.setTextColor(android.graphics.Color.WHITE);
-        btnZoomToggle.setTextSize(11f);
+        // Duplicate rokne ke liye check karenge ki button pehle se toh nahi hai
+        if (findViewById(999999) == null) {
+            final android.widget.Button btnZoomToggle = new android.widget.Button(this);
+            btnZoomToggle.setId(999999); // Custom ID di taaki duplicate na ho
+            btnZoomToggle.setText("LOCK ZOOM");
+            
+            // Modern UI: Rounded Corners & Semi-Transparent Glass Look
+            GradientDrawable shape = new GradientDrawable();
+            shape.setShape(GradientDrawable.RECTANGLE);
+            shape.setCornerRadii(new float[] { 25, 25, 25, 25, 25, 25, 25, 25 }); // Gol kinare
+            shape.setColor(android.graphics.Color.parseColor("#99000000")); // 60% Transparent Black
+            shape.setStroke(2, android.graphics.Color.parseColor("#FFFFFF")); // White border
+            btnZoomToggle.setBackground(shape);
+            
+            btnZoomToggle.setTextColor(android.graphics.Color.WHITE);
+            btnZoomToggle.setTextSize(11f);
+            btnZoomToggle.setPadding(30, 10, 30, 10);
 
-        android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(
-            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
-        );
-        params.gravity = android.view.Gravity.TOP | android.view.Gravity.RIGHT;
-        params.setMargins(0, 140, 40, 0); 
+            android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+            );
+            params.gravity = android.view.Gravity.TOP | android.view.Gravity.RIGHT;
+            params.setMargins(0, 140, 40, 0); 
 
-        addContentView(btnZoomToggle, params);
+            addContentView(btnZoomToggle, params);
 
-        final boolean[] isZoomLocked = {false};
-        btnZoomToggle.setOnClickListener(new android.view.View.OnClickListener() {
-            @Override
-            public void onClick(android.view.View v) {
-                if (!isZoomLocked[0]) {
-                    // LOCK ZOOM: Desktop width ko screen me zabardasti samet kar freeze karein (Fit Screen)
-                    web.getSettings().setSupportZoom(false);
-                    web.getSettings().setBuiltInZoomControls(false);
-                    web.evaluateJavascript(
-                        "var meta = document.querySelector('meta[name=viewport]');" +
-                        "if(!meta){ meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); }" +
-                        "meta.setAttribute('content', 'width=1024, initial-scale=0.35, maximum-scale=0.35, user-scalable=no');", 
-                        null
-                    );
-                    btnZoomToggle.setText("UNLOCK ZOOM");
-                    isZoomLocked[0] = true;
-                } else {
-                    // UNLOCK ZOOM: Desktop layout rahega par user zoom kar sakega
-                    web.getSettings().setSupportZoom(true);
-                    web.getSettings().setBuiltInZoomControls(true);
-                    web.evaluateJavascript(
-                        "var meta = document.querySelector('meta[name=viewport]');" +
-                        "if(meta){ meta.setAttribute('content', 'width=1024, initial-scale=1.0, user-scalable=yes'); }", 
-                        null
-                    );
-                    btnZoomToggle.setText("LOCK ZOOM");
-                    isZoomLocked[0] = false;
+            final boolean[] isZoomLocked = {false};
+            btnZoomToggle.setOnClickListener(new android.view.View.OnClickListener() {
+                @Override
+                public void onClick(android.view.View v) {
+                    if (!isZoomLocked[0]) {
+                        // LOCK ZOOM: Sirf zoom feature band kar raha hai, scale reset nahi kar raha
+                        web.getSettings().setSupportZoom(false);
+                        web.evaluateJavascript(
+                            "var meta = document.querySelector('meta[name=viewport]');" +
+                            "if(!meta){ meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); }" +
+                            "meta.setAttribute('content', 'width=1024, user-scalable=no');", 
+                            null
+                        );
+                        btnZoomToggle.setText("UNLOCK ZOOM");
+                        isZoomLocked[0] = true;
+                    } else {
+                        // UNLOCK ZOOM: Initial scale ko chede bina wapas zoom chalu (Phat-se zoom in nahi hoga)
+                        web.getSettings().setSupportZoom(true);
+                        web.evaluateJavascript(
+                            "var meta = document.querySelector('meta[name=viewport]');" +
+                            "if(meta){ meta.setAttribute('content', 'width=1024, user-scalable=yes'); }", 
+                            null
+                        );
+                        btnZoomToggle.setText("LOCK ZOOM");
+                        isZoomLocked[0] = false;
+                    }
                 }
-            }
-        });
+            });
+        }
         // ---------------------------------------------------------
 
         web.getSettings().setJavaScriptEnabled(true);
         
-        // ALWAYS DESKTOP MODE (Apple Mac User-Agent)
+        // ALWAYS DESKTOP MODE
         web.getSettings().setUserAgentString("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
         web.getSettings().setUseWideViewPort(true);
         web.getSettings().setLoadWithOverviewMode(true);
         web.getSettings().setAllowFileAccess(true);
         web.getSettings().setAllowContentAccess(true);
 
-        // Zoom details for Unlock mode
         web.getSettings().setSupportZoom(true); 
         web.getSettings().setBuiltInZoomControls(true);
         web.getSettings().setDisplayZoomControls(false);
