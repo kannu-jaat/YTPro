@@ -18,7 +18,7 @@ import com.google.android.youtube.pro.R;
 public class YTProWebChromeClient extends WebChromeClient {
     private final MainActivity activity;
     private final YTProWebView web;
-    
+
     private View mCustomView;
     private WebChromeClient.CustomViewCallback mCustomViewCallback;
     private int mOriginalOrientation;
@@ -57,10 +57,10 @@ public class YTProWebChromeClient extends WebChromeClient {
 
         mCustomView = paramView;
         mOriginalSystemUiVisibility = activity.getWindow().getDecorView().getSystemUiVisibility();
-        
+
         // 2. Set the activity to full screen orientation (Landscape usually)
         activity.setRequestedOrientation(mOriginalOrientation);
-        
+
         // Store portrait so onHideCustomView knows what to go back to
         mOriginalOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 
@@ -72,7 +72,7 @@ public class YTProWebChromeClient extends WebChromeClient {
     @Override
     public void onHideCustomView() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+            activity.getWindow().clearFlags(WindowManager.LayoutParams.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
             WindowManager.LayoutParams params = activity.getWindow().getAttributes();
             params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
             activity.getWindow().setAttributes(params);
@@ -81,10 +81,10 @@ public class YTProWebChromeClient extends WebChromeClient {
         ((FrameLayout) activity.getWindow().getDecorView()).removeView(mCustomView);
         mCustomView = null;
         activity.getWindow().getDecorView().setSystemUiVisibility(mOriginalSystemUiVisibility);
-        
+
         // 3. Set the activity BACK to the orientation saved right after going full screen (Portrait)
         activity.setRequestedOrientation(mOriginalOrientation);
-        
+
         // Reset state for the next time we enter full screen
         mOriginalOrientation = activity.portrait ?
                 android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT :
@@ -101,16 +101,17 @@ public class YTProWebChromeClient extends WebChromeClient {
                 activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 101);
             } else {
                 request.grant(request.getResources());
-    // 🛠️ WEBSITE KE CHOOSE FILE BUTTON KO HIJACK KARNA
-    @Override
-    public boolean onShowFileChooser(android.webkit.WebView webView, android.webkit.ValueCallback<android.net.Uri[]> filePathCallback, android.webkit.WebChromeClient.FileChooserParams fileChooserParams) {
-        if (activity instanceof com.google.android.youtube.pro.MainActivity) {
-            ((com.google.android.youtube.pro.MainActivity) activity).openCustomAudioPopup(filePathCallback);
-            return true; // Isse system ka file manager block ho jayega
-        }
-        return false;
-    }
             }
         }
+    }
+
+    // -----------------------------------------------------------------
+    // 🛠️ WEBSITE KE CHOOSE FILE BUTTON KO HIJACK KARNA (SAFE VERSION)
+    // -----------------------------------------------------------------
+    @Override
+    public boolean onShowFileChooser(android.webkit.WebView webView, android.webkit.ValueCallback<android.net.Uri[]> filePathCallback, android.webkit.WebChromeClient.FileChooserParams fileChooserParams) {
+        // Seedha MainActivity ka popup call kar diya bina kisi error ke!
+        activity.openCustomAudioPopup(filePathCallback);
+        return true; 
     }
 }
