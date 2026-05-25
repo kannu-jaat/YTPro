@@ -54,9 +54,11 @@ public class MainActivity extends Activity {
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
-        // Naya Permission Code (App khulte hi)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.READ_EXTERNAL_STORAGE}, 101);
+        // 🛠️ FIX 1: LOCAL AUDIO LOAD KARNE KE LIYE STORAGE PERMISSION (MIC HATA DIYA)
+        if (Build.VERSION.SDK_INT >= 33) { // Android 13+ ke liye
+            requestPermissions(new String[]{"android.permission.READ_MEDIA_AUDIO"}, 101);
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) { // Purane Android ke liye
+            requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 101);
         }
         
         load(false);
@@ -68,20 +70,20 @@ public class MainActivity extends Activity {
         web = findViewById(R.id.web);
 
         // ---------------------------------------------------------
-        // 🛠️ NAYA ZOOM LOCK/UNLOCK FLOATING BUTTON (TOP RIGHT)
+        // 🛠️ FIX 3: SMART ZOOM LOCK/UNLOCK TOGGLE BUTTON (TOP RIGHT)
         // ---------------------------------------------------------
         final android.widget.Button btnZoomToggle = new android.widget.Button(this);
         btnZoomToggle.setText("LOCK ZOOM");
         btnZoomToggle.setBackgroundColor(android.graphics.Color.parseColor("#CC000000"));
         btnZoomToggle.setTextColor(android.graphics.Color.WHITE);
-        btnZoomToggle.setTextSize(12f);
+        btnZoomToggle.setTextSize(11f);
 
         android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(
             android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
             android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
         );
         params.gravity = android.view.Gravity.TOP | android.view.Gravity.RIGHT;
-        params.setMargins(0, 120, 40, 0); // Thoda upar se neeche taaki status bar pe na aaye
+        params.setMargins(0, 140, 40, 0); // Status bar ke niche safe jagah
 
         addContentView(btnZoomToggle, params);
 
@@ -90,14 +92,28 @@ public class MainActivity extends Activity {
             @Override
             public void onClick(android.view.View v) {
                 if (!isZoomLocked[0]) {
-                    // Lock zoom and fit to screen
-                    web.getSettings().setSupportZoom(false);
-                    web.setInitialScale(1); // Force fit screen
+                    // Native zoom out ko loop chala kar ekdum chota karein
+                    for (int i = 0; i < 15; i++) {
+                        web.zoomOut();
+                    }
+                    // JS Viewport Hijack: Jiddi website ko desktop size me zabardasti sametein aur zoom freeze karein
+                    web.evaluateJavascript(
+                        "var meta = document.querySelector('meta[name=viewport]');" +
+                        "if(!meta){ meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); }" +
+                        "meta.setAttribute('content', 'width=1200, initial-scale=0.5, maximum-scale=0.5, user-scalable=no');", 
+                        null
+                    );
+                    web.getSettings().setSupportZoom(false); // Zoom control band
                     btnZoomToggle.setText("UNLOCK ZOOM");
                     isZoomLocked[0] = true;
                 } else {
-                    // Unlock zoom
+                    // Zoom ko wapas aazad karein
                     web.getSettings().setSupportZoom(true);
+                    web.evaluateJavascript(
+                        "var meta = document.querySelector('meta[name=viewport]');" +
+                        "if(meta){ meta.setAttribute('content', 'width=device-width, initial-scale=1.0, user-scalable=yes'); }", 
+                        null
+                    );
                     btnZoomToggle.setText("LOCK ZOOM");
                     isZoomLocked[0] = false;
                 }
@@ -107,14 +123,15 @@ public class MainActivity extends Activity {
 
         web.getSettings().setJavaScriptEnabled(true);
         
-        // Naya Desktop Mode Code
-        web.getSettings().setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
-
-        // FIT TO SCREEN / AUTO SCALING CODE
+        // 🛠️ FIX 2: AGGRESSIVE DESKTOP MODE (STUBBORN WEBSITE KILLER)
+        // Apple Mac ka User-Agent lagaya hai jo mobile redirect ko turant bypass karta hai
+        web.getSettings().setUserAgentString("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
         web.getSettings().setUseWideViewPort(true);
         web.getSettings().setLoadWithOverviewMode(true);
+        web.getSettings().setAllowFileAccess(true);
+        web.getSettings().setAllowContentAccess(true);
 
-        web.getSettings().setSupportZoom(true); // Default zoom chalu rahega
+        web.getSettings().setSupportZoom(true); 
         web.getSettings().setBuiltInZoomControls(true);
         web.getSettings().setDisplayZoomControls(false);
         web.getSettings().setDomStorageEnabled(true);
@@ -195,14 +212,10 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == 101) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                web.loadUrl("https://kannujaat.netlify.app/");
-            } else {
-                Toast.makeText(getApplicationContext(), getString(R.string.grant_mic), Toast.LENGTH_SHORT).show();
-            }
+            web.loadUrl("https://kannujaat.netlify.app/");
         } else if (requestCode == 1) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_DENIED) {
-                Toast.makeText(getApplicationContext(), getString(R.string.grant_storage), Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), "Storage permission required for local tracks", Toast.LENGTH_SHORT).show();
             }
         }
     }
