@@ -30,7 +30,6 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 
@@ -60,7 +59,7 @@ public class MainActivity extends Activity {
     private OnBackInvokedCallback backCallback;
     public BinaryStreamManager streamManager;
 
-    // Custom Audio Model
+    // Custom Audio Model (DJ Loader)
     static class AudioModel {
         String name;
         Uri uri;
@@ -74,7 +73,6 @@ public class MainActivity extends Activity {
             this.duration = duration;
             this.dateAdded = dateAdded;
             
-            // Duration ko Min:Sec me convert karna
             long min = (duration / 1000) / 60;
             long sec = (duration / 1000) % 60;
             this.durationStr = String.format(Locale.US, "%02d:%02d", min, sec);
@@ -97,7 +95,7 @@ public class MainActivity extends Activity {
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
-        // Storage Permission System
+        // Smart Permissions
         if (Build.VERSION.SDK_INT >= 33) {
             if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(new String[]{android.Manifest.permission.READ_MEDIA_AUDIO}, 101);
@@ -192,14 +190,11 @@ public class MainActivity extends Activity {
         streamManager = new BinaryStreamManager(web,this);
     }
 
-    // ---------------------------------------------------------------------
-    // 🛠️ HARDCORE CUSTOM DJ AUDIO POPUP (SEARCH, SORT, DURATION, NO FILE MANAGER)
-    // ---------------------------------------------------------------------
+    // --- HARDCORE CUSTOM DJ AUDIO POPUP ---
     public void openCustomAudioPopup(final ValueCallback<Uri[]> filePathCallback) {
         final ArrayList<AudioModel> allTracks = new ArrayList<>();
         final ArrayList<AudioModel> displayList = new ArrayList<>();
 
-        // 1. Phone se saare audio tracks scan karna
         Uri collection = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? 
                 MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL) : 
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
@@ -220,26 +215,20 @@ public class MainActivity extends Activity {
                     Uri trackUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id);
                     
                     if (name != null && (name.endsWith(".mp3") || name.endsWith(".wav") || name.endsWith(".m4a"))) {
-                        AudioModel track = new AudioModel(name, trackUri, duration, date);
-                        allTracks.add(track);
+                        displayList.add(new AudioModel(name, trackUri, duration, date));
                     }
                 } while (cursor.moveToNext());
             }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        displayList.addAll(allTracks);
-
-        // 2. Custom Dialog Builder Pure Java Code se UI Design Karna
-        final Dialog dialog = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        } catch (Exception e) {}
         
+        allTracks.addAll(displayList);
+
+        final Dialog dialog = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
         LinearLayout mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
-        mainLayout.setBackgroundColor(android.graphics.Color.parseColor("#121212")); // Dark Background
+        mainLayout.setBackgroundColor(android.graphics.Color.parseColor("#121212"));
         mainLayout.setPadding(30, 40, 30, 30);
 
-        // Header Title
         TextView titleTv = new TextView(this);
         titleTv.setText("SELECT DJ TRACK");
         titleTv.setTextColor(android.graphics.Color.WHITE);
@@ -247,9 +236,8 @@ public class MainActivity extends Activity {
         titleTv.setGravity(android.view.Gravity.CENTER);
         mainLayout.addView(titleTv);
 
-        // Search Bar
         final EditText searchBar = new EditText(this);
-        searchBar.setHint("Search track name...");
+        searchBar.setHint("Search track...");
         searchBar.setHintTextColor(android.graphics.Color.GRAY);
         searchBar.setTextColor(android.graphics.Color.WHITE);
         searchBar.setPadding(20, 20, 20, 20);
@@ -261,24 +249,15 @@ public class MainActivity extends Activity {
         searchParams.setMargins(0, 30, 0, 20);
         mainLayout.addView(searchBar, searchParams);
 
-        // Filter/Sort Buttons (Horizontal Layout)
         LinearLayout filterLayout = new LinearLayout(this);
         filterLayout.setOrientation(LinearLayout.HORIZONTAL);
-        
-        final Button btnAtoZ = new Button(this);
-        btnAtoZ.setText("A to Z");
-        btnAtoZ.setTextSize(11f);
-        final Button btnNewest = new Button(this);
-        btnNewest.setText("Newest First");
-        btnNewest.setTextSize(11f);
-
+        final Button btnAtoZ = new Button(this); btnAtoZ.setText("A to Z"); btnAtoZ.setTextSize(11f);
+        final Button btnNewest = new Button(this); btnNewest.setText("Newest"); btnNewest.setTextSize(11f);
         LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
         btnParams.setMargins(5, 0, 5, 20);
-        filterLayout.addView(btnAtoZ, btnParams);
-        filterLayout.addView(btnNewest, btnParams);
+        filterLayout.addView(btnAtoZ, btnParams); filterLayout.addView(btnNewest, btnParams);
         mainLayout.addView(filterLayout);
 
-        // Tracks ListView
         final ListView listView = new ListView(this);
         final ArrayAdapter<AudioModel> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, displayList);
         listView.setAdapter(adapter);
@@ -287,81 +266,53 @@ public class MainActivity extends Activity {
         dialog.setContentView(mainLayout);
         dialog.show();
 
-        // 3. LOGIC: Search System implementation
         searchBar.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 displayList.clear();
-                String query = s.toString().toLowerCase(Locale.getDefault());
-                for (AudioModel track : allTracks) {
-                    if (track.name.toLowerCase(Locale.getDefault()).contains(query)) {
-                        displayList.add(track);
-                    }
+                for (AudioModel t : allTracks) {
+                    if (t.name.toLowerCase().contains(s.toString().toLowerCase())) displayList.add(t);
                 }
                 adapter.notifyDataSetChanged();
             }
-            @Override
-            public void afterTextChanged(Editable s) {}
+            @Override public void afterTextChanged(Editable s) {}
         });
 
-        // 4. LOGIC: Sorting Functions
-        btnAtoZ.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Collections.sort(displayList, new Comparator<AudioModel>() {
-                    @Override
-                    public int compare(AudioModel o1, AudioModel o2) {
-                        return o1.name.compareToIgnoreCase(o2.name);
-                    }
-                });
-                adapter.notifyDataSetChanged();
-            }
+        btnAtoZ.setOnClickListener(v -> {
+            Collections.sort(displayList, (o1, o2) -> o1.name.compareToIgnoreCase(o2.name));
+            adapter.notifyDataSetChanged();
         });
 
-        btnNewest.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Collections.sort(displayList, new Comparator<AudioModel>() {
-                    @Override
-                    public int compare(AudioModel o1, AudioModel o2) {
-                        return Long.compare(o2.dateAdded, o1.dateAdded);
-                    }
-                });
-                adapter.notifyDataSetChanged();
-            }
+        btnNewest.setOnClickListener(v -> {
+            Collections.sort(displayList, (o1, o2) -> Long.compare(o2.dateAdded, o1.dateAdded));
+            adapter.notifyDataSetChanged();
         });
-
-        // Default sort: Newest First
         btnNewest.performClick();
 
-        // 5. Item Selection -> Pass data back to Netlify Website
-        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                AudioModel selectedTrack = displayList.get(position);
-                filePathCallback.onReceiveValue(new Uri[]{selectedTrack.uri});
-                dialog.dismiss();
-            }
+        listView.setOnItemClickListener((parent, view, position, id) -> {
+            filePathCallback.onReceiveValue(new Uri[]{displayList.get(position).uri});
+            dialog.dismiss();
         });
 
-        // Handle Back button/Cancel popup without freezing WebView
-        dialog.setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
-            @Override
-            public void onCancel(android.content.DialogInterface dialog) {
-                filePathCallback.onReceiveValue(null);
-            }
-        });
+        dialog.setOnCancelListener(d -> filePathCallback.onReceiveValue(null));
     }
-    // ---------------------------------------------------------------------
 
+    // ---------------------------------------------------------------------
+    // 🛠️ FINAL BOSS: DJ NOTIFICATION RECEIVER (Naya Setup)
+    // ---------------------------------------------------------------------
     private void setupReceiver() {
         broadcastReceiver = new MediaCommandReceiver(web);
+        IntentFilter filter = new IntentFilter();
+        // Hamare notification panel ke action sunne ke liye
+        filter.addAction("LEFT_TOGGLE");
+        filter.addAction("RIGHT_TOGGLE");
+        filter.addAction("XFADER_LEFT");
+        filter.addAction("XFADER_RIGHT");
+        
         if (Build.VERSION.SDK_INT >= 34 && getApplicationInfo().targetSdkVersion >= 34) {
-            registerReceiver(broadcastReceiver, new IntentFilter("TRACKS_TRACKS"), RECEIVER_EXPORTED);
+            registerReceiver(broadcastReceiver, filter, RECEIVER_EXPORTED);
         } else {
-            registerReceiver(broadcastReceiver, new IntentFilter("TRACKS_TRACKS"));
+            registerReceiver(broadcastReceiver, filter);
         }
     }
 
@@ -378,12 +329,89 @@ public class MainActivity extends Activity {
         }
     }
 
+    // ---------------------------------------------------------------------
+    // 🛠️ NEW FEATURE: MINIMIZE OR EXIT PRO POPUP (Behti Ganga)
+    // ---------------------------------------------------------------------
     private void handleBackPress() {
         if (web.canGoBack()) {
             web.goBack();
         } else {
-            finish();
+            showExitDialog();
         }
+    }
+
+    private void showExitDialog() {
+        final Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        }
+
+        // Custom Neon Green Popup UI
+        LinearLayout mainLayout = new LinearLayout(this);
+        mainLayout.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(android.graphics.Color.parseColor("#1A1A1A"));
+        bg.setCornerRadius(30f);
+        bg.setStroke(3, android.graphics.Color.parseColor("#34d399")); // Neon Green border
+        mainLayout.setBackground(bg);
+        mainLayout.setPadding(60, 60, 60, 60);
+
+        TextView titleTv = new TextView(this);
+        titleTv.setText("Close KK Mixer?");
+        titleTv.setTextColor(android.graphics.Color.WHITE);
+        titleTv.setTextSize(20f);
+        titleTv.setGravity(android.view.Gravity.CENTER);
+        titleTv.setTypeface(null, android.graphics.Typeface.BOLD);
+        
+        TextView subTv = new TextView(this);
+        subTv.setText("Keep playing music in background or exit completely?");
+        subTv.setTextColor(android.graphics.Color.LTGRAY);
+        subTv.setTextSize(14f);
+        subTv.setGravity(android.view.Gravity.CENTER);
+        subTv.setPadding(0, 20, 0, 40);
+
+        LinearLayout btnLayout = new LinearLayout(this);
+        btnLayout.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button btnMinimize = new Button(this);
+        btnMinimize.setText("MINIMIZE");
+        btnMinimize.setTextColor(android.graphics.Color.WHITE);
+        GradientDrawable btnBgMin = new GradientDrawable();
+        btnBgMin.setColor(android.graphics.Color.parseColor("#333333"));
+        btnBgMin.setCornerRadius(15f);
+        btnMinimize.setBackground(btnBgMin);
+        
+        Button btnExit = new Button(this);
+        btnExit.setText("EXIT");
+        btnExit.setTextColor(android.graphics.Color.BLACK);
+        GradientDrawable btnBgExt = new GradientDrawable();
+        btnBgExt.setColor(android.graphics.Color.parseColor("#34d399")); // Neon Green Exit
+        btnBgExt.setCornerRadius(15f);
+        btnExit.setBackground(btnBgExt);
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
+        params.setMargins(10, 0, 10, 0);
+
+        btnLayout.addView(btnMinimize, params);
+        btnLayout.addView(btnExit, params);
+
+        mainLayout.addView(titleTv);
+        mainLayout.addView(subTv);
+        mainLayout.addView(btnLayout);
+        dialog.setContentView(mainLayout);
+
+        btnMinimize.setOnClickListener(v -> {
+            dialog.dismiss();
+            moveTaskToBack(true); // App background me chali jayegi
+        });
+
+        btnExit.setOnClickListener(v -> {
+            dialog.dismiss();
+            finish(); // App poori band ho jayegi
+        });
+
+        dialog.show();
     }
 
     @Override
@@ -416,9 +444,7 @@ public class MainActivity extends Activity {
                             .setAspectRatio(new Rational(portrait ? 9 : 16, portrait ? 16 : 9))
                             .build();
                     enterPictureInPictureMode(params);
-                } catch (IllegalStateException e) {
-                    e.printStackTrace();
-                }
+                } catch (IllegalStateException e) {}
             }
         }
     }
