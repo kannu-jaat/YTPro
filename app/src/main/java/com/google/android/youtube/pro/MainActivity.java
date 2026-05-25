@@ -55,7 +55,6 @@ public class MainActivity extends Activity {
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
-        // 🛠️ SMART PERMISSION CHECK (Baar-baar nahi maangega aur Settings page nahi kholega)
         if (Build.VERSION.SDK_INT >= 33) {
             if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(new String[]{android.Manifest.permission.READ_MEDIA_AUDIO}, 101);
@@ -75,32 +74,33 @@ public class MainActivity extends Activity {
         web = findViewById(R.id.web);
 
         // ---------------------------------------------------------
-        // 🛠️ NEW UI & ZOOM LOGIC: TRANSPARENT BUTTON & LEVEL PRESERVATION
+        // 🛠️ MINIMAL EMOJI ZOOM TOGGLE BUTTON (SUPER TOP-RIGHT & TINY)
         // ---------------------------------------------------------
-        // Duplicate rokne ke liye check karenge ki button pehle se toh nahi hai
         if (findViewById(999999) == null) {
             final android.widget.Button btnZoomToggle = new android.widget.Button(this);
-            btnZoomToggle.setId(999999); // Custom ID di taaki duplicate na ho
-            btnZoomToggle.setText("LOCK ZOOM");
+            btnZoomToggle.setId(999999);
+            btnZoomToggle.setText("🔒"); // Shuruat me Lock Emoji
             
-            // Modern UI: Rounded Corners & Semi-Transparent Glass Look
+            // Ultra Clean Glass Design (Chhotu Size)
             GradientDrawable shape = new GradientDrawable();
             shape.setShape(GradientDrawable.RECTANGLE);
-            shape.setCornerRadii(new float[] { 25, 25, 25, 25, 25, 25, 25, 25 }); // Gol kinare
-            shape.setColor(android.graphics.Color.parseColor("#99000000")); // 60% Transparent Black
-            shape.setStroke(2, android.graphics.Color.parseColor("#FFFFFF")); // White border
+            shape.setCornerRadii(new float[] { 15, 15, 15, 15, 15, 15, 15, 15 }); // Halki si rounding
+            shape.setColor(android.graphics.Color.parseColor("#77000000")); // Zyada transparent black
+            shape.setStroke(1, android.graphics.Color.parseColor("#88FFFFFF")); // Patli border
             btnZoomToggle.setBackground(shape);
             
             btnZoomToggle.setTextColor(android.graphics.Color.WHITE);
-            btnZoomToggle.setTextSize(11f);
-            btnZoomToggle.setPadding(30, 10, 30, 10);
+            btnZoomToggle.setTextSize(14f); // Emoji thoda saaf dikhe
+            
+            // Button ka padding ekdum kam kiya taaki bada na ho
+            btnZoomToggle.setPadding(15, 10, 15, 10);
 
             android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
                 android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
             );
             params.gravity = android.view.Gravity.TOP | android.view.Gravity.RIGHT;
-            params.setMargins(0, 140, 40, 0); 
+            params.setMargins(0, 45, 10, 0); // Ekdum kone me set kiya hai (Right se sirf 10px margin)
 
             addContentView(btnZoomToggle, params);
 
@@ -109,25 +109,25 @@ public class MainActivity extends Activity {
                 @Override
                 public void onClick(android.view.View v) {
                     if (!isZoomLocked[0]) {
-                        // LOCK ZOOM: Sirf zoom feature band kar raha hai, scale reset nahi kar raha
                         web.getSettings().setSupportZoom(false);
+                        web.getSettings().setBuiltInZoomControls(false);
                         web.evaluateJavascript(
                             "var meta = document.querySelector('meta[name=viewport]');" +
                             "if(!meta){ meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); }" +
                             "meta.setAttribute('content', 'width=1024, user-scalable=no');", 
                             null
                         );
-                        btnZoomToggle.setText("UNLOCK ZOOM");
+                        btnZoomToggle.setText("🔓"); // Lock hone ke baad Unlock ka option dikhega
                         isZoomLocked[0] = true;
                     } else {
-                        // UNLOCK ZOOM: Initial scale ko chede bina wapas zoom chalu (Phat-se zoom in nahi hoga)
                         web.getSettings().setSupportZoom(true);
+                        web.getSettings().setBuiltInZoomControls(true);
                         web.evaluateJavascript(
                             "var meta = document.querySelector('meta[name=viewport]');" +
                             "if(meta){ meta.setAttribute('content', 'width=1024, user-scalable=yes'); }", 
                             null
                         );
-                        btnZoomToggle.setText("LOCK ZOOM");
+                        btnZoomToggle.setText("🔒"); // Unlock hone ke baad wapas Lock ka option
                         isZoomLocked[0] = false;
                     }
                 }
