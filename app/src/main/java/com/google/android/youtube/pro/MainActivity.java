@@ -54,11 +54,25 @@ public class MainActivity extends Activity {
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
-        // 🛠️ FIX 1: LOCAL AUDIO LOAD KARNE KE LIYE STORAGE PERMISSION (MIC HATA DIYA)
-        if (Build.VERSION.SDK_INT >= 33) { // Android 13+ ke liye
-            requestPermissions(new String[]{"android.permission.READ_MEDIA_AUDIO"}, 101);
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) { // Purane Android ke liye
-            requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 101);
+        // 🛠️ FIX: Sahi Tarike Se Storage/All Files Permission Maangna
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11+ ke liye All Files Access Environment Maangna
+            try {
+                Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                intent.addCategory("android.intent.category.DEFAULT");
+                intent.setData(Uri.parse(String.format("package:%s", getApplicationContext().getPackageName())));
+                startActivity(intent);
+            } catch (Exception e) {
+                Intent intent = new Intent();
+                intent.setAction(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                startActivity(intent);
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // Purane Androids ke liye Normal Storage Permission
+            requestPermissions(new String[]{
+                android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+            }, 101);
         }
         
         load(false);
@@ -70,7 +84,7 @@ public class MainActivity extends Activity {
         web = findViewById(R.id.web);
 
         // ---------------------------------------------------------
-        // 🛠️ FIX 3: SMART ZOOM LOCK/UNLOCK TOGGLE BUTTON (TOP RIGHT)
+        // 🛠️ REAL TOGGLE: ALWAYS DESKTOP MODE + ZOOM LOCK SYSTEM
         // ---------------------------------------------------------
         final android.widget.Button btnZoomToggle = new android.widget.Button(this);
         btnZoomToggle.setText("LOCK ZOOM");
@@ -83,7 +97,7 @@ public class MainActivity extends Activity {
             android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
         );
         params.gravity = android.view.Gravity.TOP | android.view.Gravity.RIGHT;
-        params.setMargins(0, 140, 40, 0); // Status bar ke niche safe jagah
+        params.setMargins(0, 140, 40, 0); 
 
         addContentView(btnZoomToggle, params);
 
@@ -92,26 +106,24 @@ public class MainActivity extends Activity {
             @Override
             public void onClick(android.view.View v) {
                 if (!isZoomLocked[0]) {
-                    // Native zoom out ko loop chala kar ekdum chota karein
-                    for (int i = 0; i < 15; i++) {
-                        web.zoomOut();
-                    }
-                    // JS Viewport Hijack: Jiddi website ko desktop size me zabardasti sametein aur zoom freeze karein
+                    // LOCK ZOOM: Desktop width ko screen me zabardasti samet kar freeze karein (Fit Screen)
+                    web.getSettings().setSupportZoom(false);
+                    web.getSettings().setBuiltInZoomControls(false);
                     web.evaluateJavascript(
                         "var meta = document.querySelector('meta[name=viewport]');" +
                         "if(!meta){ meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); }" +
-                        "meta.setAttribute('content', 'width=1200, initial-scale=0.5, maximum-scale=0.5, user-scalable=no');", 
+                        "meta.setAttribute('content', 'width=1024, initial-scale=0.35, maximum-scale=0.35, user-scalable=no');", 
                         null
                     );
-                    web.getSettings().setSupportZoom(false); // Zoom control band
                     btnZoomToggle.setText("UNLOCK ZOOM");
                     isZoomLocked[0] = true;
                 } else {
-                    // Zoom ko wapas aazad karein
+                    // UNLOCK ZOOM: Desktop layout rahega par user zoom kar sakega
                     web.getSettings().setSupportZoom(true);
+                    web.getSettings().setBuiltInZoomControls(true);
                     web.evaluateJavascript(
                         "var meta = document.querySelector('meta[name=viewport]');" +
-                        "if(meta){ meta.setAttribute('content', 'width=device-width, initial-scale=1.0, user-scalable=yes'); }", 
+                        "if(meta){ meta.setAttribute('content', 'width=1024, initial-scale=1.0, user-scalable=yes'); }", 
                         null
                     );
                     btnZoomToggle.setText("LOCK ZOOM");
@@ -123,17 +135,18 @@ public class MainActivity extends Activity {
 
         web.getSettings().setJavaScriptEnabled(true);
         
-        // 🛠️ FIX 2: AGGRESSIVE DESKTOP MODE (STUBBORN WEBSITE KILLER)
-        // Apple Mac ka User-Agent lagaya hai jo mobile redirect ko turant bypass karta hai
+        // ALWAYS DESKTOP MODE (Apple Mac User-Agent)
         web.getSettings().setUserAgentString("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
         web.getSettings().setUseWideViewPort(true);
         web.getSettings().setLoadWithOverviewMode(true);
         web.getSettings().setAllowFileAccess(true);
         web.getSettings().setAllowContentAccess(true);
 
+        // Zoom details for Unlock mode
         web.getSettings().setSupportZoom(true); 
         web.getSettings().setBuiltInZoomControls(true);
         web.getSettings().setDisplayZoomControls(false);
+        
         web.getSettings().setDomStorageEnabled(true);
         web.getSettings().setDatabaseEnabled(true);
         web.getSettings().setMediaPlaybackRequiresUserGesture(false); 
@@ -213,10 +226,6 @@ public class MainActivity extends Activity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == 101) {
             web.loadUrl("https://kannujaat.netlify.app/");
-        } else if (requestCode == 1) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_DENIED) {
-                Toast.makeText(getApplicationContext(), "Storage permission required for local tracks", Toast.LENGTH_SHORT).show();
-            }
         }
     }
 
