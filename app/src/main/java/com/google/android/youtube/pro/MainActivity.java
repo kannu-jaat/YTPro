@@ -41,42 +41,80 @@ public class MainActivity extends Activity {
     private MediaCommandReceiver broadcastReceiver;
     private OnBackInvokedCallback backCallback;
     public BinaryStreamManager streamManager;
-    
-    
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
-        
+
         SharedPreferences prefs = getSharedPreferences("YTPRO", MODE_PRIVATE);
         if (!prefs.contains("bgplay")) {
             prefs.edit().putBoolean("bgplay", true).apply();
         }
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-// Naya Permission Code
-if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-    requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.READ_EXTERNAL_STORAGE}, 101);
-}
-load(false);
+        
+        // Naya Permission Code (App khulte hi)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.READ_EXTERNAL_STORAGE}, 101);
+        }
+        
+        load(false);
     }
 
     public void load(boolean dl) {
-              
-        
+
         this.dL = dl;
         web = findViewById(R.id.web);
+
+        // ---------------------------------------------------------
+        // 🛠️ NAYA ZOOM LOCK/UNLOCK FLOATING BUTTON (TOP RIGHT)
+        // ---------------------------------------------------------
+        final android.widget.Button btnZoomToggle = new android.widget.Button(this);
+        btnZoomToggle.setText("LOCK ZOOM");
+        btnZoomToggle.setBackgroundColor(android.graphics.Color.parseColor("#CC000000"));
+        btnZoomToggle.setTextColor(android.graphics.Color.WHITE);
+        btnZoomToggle.setTextSize(12f);
+
+        android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+        );
+        params.gravity = android.view.Gravity.TOP | android.view.Gravity.RIGHT;
+        params.setMargins(0, 120, 40, 0); // Thoda upar se neeche taaki status bar pe na aaye
+
+        addContentView(btnZoomToggle, params);
+
+        final boolean[] isZoomLocked = {false};
+        btnZoomToggle.setOnClickListener(new android.view.View.OnClickListener() {
+            @Override
+            public void onClick(android.view.View v) {
+                if (!isZoomLocked[0]) {
+                    // Lock zoom and fit to screen
+                    web.getSettings().setSupportZoom(false);
+                    web.setInitialScale(1); // Force fit screen
+                    btnZoomToggle.setText("UNLOCK ZOOM");
+                    isZoomLocked[0] = true;
+                } else {
+                    // Unlock zoom
+                    web.getSettings().setSupportZoom(true);
+                    btnZoomToggle.setText("LOCK ZOOM");
+                    isZoomLocked[0] = false;
+                }
+            }
+        });
+        // ---------------------------------------------------------
+
+        web.getSettings().setJavaScriptEnabled(true);
         
-                web.getSettings().setJavaScriptEnabled(true);
         // Naya Desktop Mode Code
         web.getSettings().setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
-        
-        // 🛠️ FIT TO SCREEN / AUTO SCALING CODE
+
+        // FIT TO SCREEN / AUTO SCALING CODE
         web.getSettings().setUseWideViewPort(true);
         web.getSettings().setLoadWithOverviewMode(true);
 
-        web.getSettings().setSupportZoom(true);
+        web.getSettings().setSupportZoom(true); // Default zoom chalu rahega
         web.getSettings().setBuiltInZoomControls(true);
         web.getSettings().setDisplayZoomControls(false);
         web.getSettings().setDomStorageEnabled(true);
@@ -102,27 +140,21 @@ load(false);
                 url = sharedText;
             }
         }
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
           web.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         }
 
-
         web.addJavascriptInterface(new WebAppInterface(this, web), "Android");
         web.setWebChromeClient(new YTProWebChromeClient(this, web));
         web.setWebViewClient(new YTProWebViewClient(this, web));
-        
+
         web.loadUrl(url);
 
         setupReceiver();
         setupBackNavigation();
         streamManager = new BinaryStreamManager(web,this);
-        
-        
     }
-         
-
-   
 
     private void setupReceiver() {
         broadcastReceiver = new MediaCommandReceiver(web);
