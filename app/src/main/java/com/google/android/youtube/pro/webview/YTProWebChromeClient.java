@@ -72,7 +72,8 @@ public class YTProWebChromeClient extends WebChromeClient {
     @Override
     public void onHideCustomView() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            activity.getWindow().clearFlags(WindowManager.LayoutParams.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+            // 🛠️ MERI GALTI YAHI THI (Extra LayoutParams hata diya)
+            activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
             WindowManager.LayoutParams params = activity.getWindow().getAttributes();
             params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
             activity.getWindow().setAttributes(params);
@@ -110,7 +111,6 @@ public class YTProWebChromeClient extends WebChromeClient {
     // -----------------------------------------------------------------
     @Override
     public boolean onShowFileChooser(android.webkit.WebView webView, android.webkit.ValueCallback<android.net.Uri[]> filePathCallback, android.webkit.WebChromeClient.FileChooserParams fileChooserParams) {
-        // Seedha MainActivity ka popup call kar diya bina kisi error ke!
         activity.openCustomAudioPopup(filePathCallback);
         return true; 
     }
