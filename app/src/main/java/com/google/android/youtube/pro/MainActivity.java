@@ -55,7 +55,11 @@ public class MainActivity extends Activity {
         }
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        load(false);
+// Naya Permission Code
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+    requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.READ_EXTERNAL_STORAGE}, 101);
+}
+load(false);
     }
 
     public void load(boolean dl) {
@@ -64,7 +68,14 @@ public class MainActivity extends Activity {
         this.dL = dl;
         web = findViewById(R.id.web);
         
-        web.getSettings().setJavaScriptEnabled(true);
+                web.getSettings().setJavaScriptEnabled(true);
+        // Naya Desktop Mode Code
+        web.getSettings().setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
+        
+        // 🛠️ FIT TO SCREEN / AUTO SCALING CODE
+        web.getSettings().setUseWideViewPort(true);
+        web.getSettings().setLoadWithOverviewMode(true);
+
         web.getSettings().setSupportZoom(true);
         web.getSettings().setBuiltInZoomControls(true);
         web.getSettings().setDisplayZoomControls(false);
