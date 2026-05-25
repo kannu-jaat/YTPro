@@ -101,6 +101,15 @@ public class YTProWebChromeClient extends WebChromeClient {
                 activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 101);
             } else {
                 request.grant(request.getResources());
+    // 🛠️ WEBSITE KE CHOOSE FILE BUTTON KO HIJACK KARNA
+    @Override
+    public boolean onShowFileChooser(android.webkit.WebView webView, android.webkit.ValueCallback<android.net.Uri[]> filePathCallback, android.webkit.WebChromeClient.FileChooserParams fileChooserParams) {
+        if (activity instanceof com.google.android.youtube.pro.MainActivity) {
+            ((com.google.android.youtube.pro.MainActivity) activity).openCustomAudioPopup(filePathCallback);
+            return true; // Isse system ka file manager block ho jayega
+        }
+        return false;
+    }
             }
         }
     }
