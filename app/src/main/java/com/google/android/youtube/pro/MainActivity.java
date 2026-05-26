@@ -57,7 +57,9 @@ public class MainActivity extends Activity {
     public boolean dL = false;
 
     private YTProWebView web; 
-    private WebView ytHomeWeb; 
+    // 🛠️ FIX: Normal WebView ko hata kar YTProWebView kar diya taaki Type Mismatch error na aaye!
+    private YTProWebView ytHomeWeb; 
+    
     private View dragHandle;  
     private LinearLayout rootContainer;
 
@@ -112,7 +114,8 @@ public class MainActivity extends Activity {
         rootContainer.setOrientation(LinearLayout.VERTICAL);
         rootContainer.setLayoutParams(new LinearLayout.LayoutParams(-1, -1));
 
-        ytHomeWeb = new WebView(this);
+        // 🛠️ FIX: YTProWebView Initialization
+        ytHomeWeb = new YTProWebView(this);
         LinearLayout.LayoutParams ytParams = new LinearLayout.LayoutParams(-1, ytHeight);
         ytHomeWeb.setLayoutParams(ytParams);
         
@@ -214,7 +217,7 @@ public class MainActivity extends Activity {
             });
         }
 
-        // 🛡️ THE PRO FIX: Asli YouTube (Top screen) ko bhi Adblocker & Background Play de diya
+        // 🛡️ THE PRO FIX: Asli YouTube ko bhi Adblocker & Background Play de diya
         ytHomeWeb.getSettings().setJavaScriptEnabled(true);
         ytHomeWeb.getSettings().setDomStorageEnabled(true);
         ytHomeWeb.getSettings().setDatabaseEnabled(true);
