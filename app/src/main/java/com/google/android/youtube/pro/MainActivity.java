@@ -114,7 +114,7 @@ public class MainActivity extends Activity {
         load(false);
     }
 
-    // 🔔 NAYA FUNCTION: Notification panel ke buttons dabne par kya hoga
+        // 🔔 NAYA AUR SMART FUNCTION: Next aur Prev ka asli ilaaj
     private void setupYTSessionManager() {
         ytMediaSessionManager = new YTMediaSessionManager(this, new YTMediaSessionManager.YTActionCallback() {
             @Override
@@ -127,11 +127,27 @@ public class MainActivity extends Activity {
             }
             @Override
             public void onNext() {
-                if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var next = document.querySelector('.ytm-autonav-endscreen-upnext-play-button'); if(next) next.click();", null);
+                if(ytHomeWeb != null) {
+                    // Mobile site ke 'Next' button ko dhoondhega. Agar na mile toh suggested list ke pehle video ko play kar dega.
+                    String js = "var nextBtn = document.querySelector('.ytp-next-button, button[aria-label=\"Next video\"], a.ytp-next-button'); " +
+                                "if(nextBtn) { nextBtn.click(); } else { " +
+                                "  var nextVid = document.querySelector('ytm-video-with-context-renderer a, ytm-compact-video-renderer a'); " +
+                                "  if(nextVid) nextVid.click(); " +
+                                "}";
+                    ytHomeWeb.evaluateJavascript(js, null);
+                }
             }
             @Override
             public void onPrev() {
-                if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.currentTime = 0;", null);
+                if(ytHomeWeb != null) {
+                    // Smart Prev: 5s se zyada chala hai toh 0:00 se chalu karo, nahi toh History Back/Pichla gaana lagao.
+                    String js = "var prevBtn = document.querySelector('.ytp-prev-button, button[aria-label=\"Previous video\"], a.ytp-prev-button'); " +
+                                "var v = document.querySelector('video'); " +
+                                "if(prevBtn && !prevBtn.disabled) { prevBtn.click(); } " +
+                                "else if(v && v.currentTime > 5) { v.currentTime = 0; } " +
+                                "else { window.history.back(); }";
+                    ytHomeWeb.evaluateJavascript(js, null);
+                }
             }
             @Override
             public void onClose() {
@@ -139,6 +155,7 @@ public class MainActivity extends Activity {
             }
         });
     }
+
 
     private void setupDynamicLayout() {
         rootContainer = new LinearLayout(this);
