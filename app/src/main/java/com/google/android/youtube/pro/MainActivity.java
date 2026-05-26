@@ -57,7 +57,6 @@ public class MainActivity extends Activity {
     public boolean dL = false;
 
     private YTProWebView web; 
-    // 🛠️ FIX: Normal WebView ko hata kar YTProWebView kar diya taaki Type Mismatch error na aaye!
     private YTProWebView ytHomeWeb; 
     
     private View dragHandle;  
@@ -114,7 +113,6 @@ public class MainActivity extends Activity {
         rootContainer.setOrientation(LinearLayout.VERTICAL);
         rootContainer.setLayoutParams(new LinearLayout.LayoutParams(-1, -1));
 
-        // 🛠️ FIX: YTProWebView Initialization
         ytHomeWeb = new YTProWebView(this);
         LinearLayout.LayoutParams ytParams = new LinearLayout.LayoutParams(-1, ytHeight);
         ytHomeWeb.setLayoutParams(ytParams);
@@ -217,7 +215,6 @@ public class MainActivity extends Activity {
             });
         }
 
-        // 🛡️ THE PRO FIX: Asli YouTube ko bhi Adblocker & Background Play de diya
         ytHomeWeb.getSettings().setJavaScriptEnabled(true);
         ytHomeWeb.getSettings().setDomStorageEnabled(true);
         ytHomeWeb.getSettings().setDatabaseEnabled(true);
@@ -233,7 +230,6 @@ public class MainActivity extends Activity {
         ytHomeWeb.setWebChromeClient(new YTProWebChromeClient(this, ytHomeWeb));
         ytHomeWeb.loadUrl("https://m.youtube.com");
 
-        // ⚡ NETLIFY CACHE FIX: Decks ab pehli baar me hi show honge
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setUserAgentString("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
         web.getSettings().setUseWideViewPort(true);
@@ -254,7 +250,6 @@ public class MainActivity extends Activity {
 
         web.addJavascriptInterface(new WebAppInterface(this, web), "Android");
         
-        // ⚡ BRIDGE: Bypass to Left/Right Input and show Popup
         ytHomeWeb.addJavascriptInterface(new Object() {
             @android.webkit.JavascriptInterface
             public void sendToDeck(String deck, String videoId) {
@@ -409,7 +404,7 @@ public class MainActivity extends Activity {
 
         btnWatch.setOnClickListener(v -> {
             dialog.dismiss();
-            ytHomeWeb.loadUrl(originalUrl); // Zabardasti link open kar dega bypass karke
+            ytHomeWeb.loadUrl(originalUrl);
         });
 
         dialog.show();
@@ -429,10 +424,11 @@ public class MainActivity extends Activity {
         }
     }
 
-    // 🛡️ THE INVISIBLE SHIELD: YouTube SPA Clicks block karke seedha Popup layega
+    // ⚡ THE ULTIMATE SCRIPT: Dynamic IDs, Invisible Click Shield & Auto Ad Skipper
     private void injectDJButtonsSystem() {
         String js = "if(!window.djShieldActive) { " +
                 "  window.djShieldActive = true; " +
+                // INVISIBLE SHIELD: Blocks clicks and shows popup
                 "  document.addEventListener('click', function(e) { " +
                 "    var customBtn = e.target.closest('.dj-btn-custom'); " +
                 "    if(customBtn) return; " + 
@@ -444,24 +440,44 @@ public class MainActivity extends Activity {
                 "    } " +
                 "  }, true); " +
                 "}" +
+                
                 "setInterval(function() { " +
+                // 1. ADD L/R BUTTONS WITH DYNAMIC URL FETCHING
                 "  var links = document.querySelectorAll('a[href*=\"/watch?v=\"]'); " +
                 "  links.forEach(function(link) { " +
                 "    if(link.getAttribute('dj-hooked')) return; " +
                 "    link.setAttribute('dj-hooked', 'true'); " +
-                "    var match = link.href.match(/[?&]v=([^&]+)/); " +
-                "    if(!match) return; " +
-                "    var vId = match[1]; " +
+                
                 "    var btnContainer = document.createElement('div'); " +
                 "    btnContainer.style = 'display:flex; gap:10px; padding:6px; background:#181818; justify-content:center; width:100%; margin-top:4px; border-radius:6px;'; " +
+                
                 "    var bL = document.createElement('button'); bL.className='dj-btn-custom'; bL.innerText='🎧 L'; bL.style='background:#34d399; color:#000; border:none; padding:8px 12px; font-size:13px; font-weight:bold; border-radius:6px; flex:1;'; " +
-                "    bL.onclick = function(e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); window.DJBridge.sendToDeck('left', vId); }; " +
+                "    bL.onclick = function(e) { " +
+                "       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); " +
+                "       var currentHref = link.href; " + // Real-time ID fetch (Fixes Oldest/Popular Bug)
+                "       var m = currentHref.match(/[?&]v=([^&]+)/); " +
+                "       if(m) window.DJBridge.sendToDeck('left', m[1]); " +
+                "    }; " +
+                
                 "    var bR = document.createElement('button'); bR.className='dj-btn-custom'; bR.innerText='🎛️ R'; bR.style='background:#22d3ee; color:#000; border:none; padding:8px 12px; font-size:13px; font-weight:bold; border-radius:6px; flex:1;'; " +
-                "    bR.onclick = function(e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); window.DJBridge.sendToDeck('right', vId); }; " +
+                "    bR.onclick = function(e) { " +
+                "       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); " +
+                "       var currentHref = link.href; " + // Real-time ID fetch (Fixes Oldest/Popular Bug)
+                "       var m = currentHref.match(/[?&]v=([^&]+)/); " +
+                "       if(m) window.DJBridge.sendToDeck('right', m[1]); " +
+                "    }; " +
+                
                 "    btnContainer.appendChild(bL); btnContainer.appendChild(bR); " +
                 "    link.parentNode.insertBefore(btnContainer, link.nextSibling); " +
                 "  }); " +
-                "}, 1500);";
+                
+                // 2. SILENT AD SKIPPER (Bypasses instream video ads instantly)
+                "  var adBox = document.querySelector('.ad-showing'); " +
+                "  var vid = document.querySelector('video'); " +
+                "  if(adBox && vid) { vid.currentTime = vid.duration; } " + // Fast forwards ad
+                "  var skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern'); " +
+                "  if(skipBtn) { skipBtn.click(); } " + // Clicks skip button
+                "}, 1000);";
         ytHomeWeb.evaluateJavascript(js, null);
     }
 
