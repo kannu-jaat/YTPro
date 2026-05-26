@@ -3,7 +3,6 @@ package com.google.android.youtube.pro;
 import android.app.Activity;
 import android.app.Dialog;
 import android.app.PictureInPictureParams;
-import android.content.BroadcastReceiver;
 import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
@@ -20,14 +19,18 @@ import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Rational;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.ValueCallback;
-import android.widget.AdapterView;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.WebChromeClient;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -38,7 +41,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Locale;
 
-// Import components
 import com.google.android.youtube.pro.webview.YTProWebView;
 import com.google.android.youtube.pro.webview.YTProWebViewClient;
 import com.google.android.youtube.pro.webview.YTProWebChromeClient;
@@ -54,10 +56,20 @@ public class MainActivity extends Activity {
     public boolean isPip = false;
     public boolean dL = false;
 
-    private YTProWebView web;
+    private YTProWebView web; // Netlify Web
+    private WebView ytHomeWeb; // Naya YouTube Web
+    private View dragHandle;  // Resizer Line
+    private LinearLayout rootContainer;
+
     private MediaCommandReceiver broadcastReceiver;
     private OnBackInvokedCallback backCallback;
     public BinaryStreamManager streamManager;
+    private SharedPreferences prefs;
+
+    // Default Height Configuration (In Pixels)
+    private int ytHeight = 500; 
+    private boolean isYtVisible = true;
+    private boolean isZoomLocked = false;
 
     static class AudioModel {
         String name; Uri uri; long duration; long dateAdded; String durationStr;
@@ -72,15 +84,20 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.main);
-
-        SharedPreferences prefs = getSharedPreferences("YTPRO", MODE_PRIVATE);
-        if (!prefs.contains("bgplay")) {
-            prefs.edit().putBoolean("bgplay", true).apply();
-        }
+        
+        prefs = getSharedPreferences("YTPRO", MODE_PRIVATE);
+        if (!prefs.contains("bgplay")) prefs.edit().putBoolean("bgplay", true).apply();
+        
+        // Local Storage se states nikalna
+        ytHeight = prefs.getInt("yt_height", 600);
+        isYtVisible = prefs.getBoolean("yt_visible", true);
+        isZoomLocked = prefs.getBoolean("zoom_locked", false);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
+        // UI Container Setup
+        setupDynamicLayout();
+
         if (Build.VERSION.SDK_INT >= 33) {
             if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(new String[]{android.Manifest.permission.READ_MEDIA_AUDIO}, 101);
@@ -94,49 +111,148 @@ public class MainActivity extends Activity {
         load(false);
     }
 
+    private void setupDynamicLayout() {
+        rootContainer = new LinearLayout(this);
+        rootContainer.setOrientation(LinearLayout.VERTICAL);
+        rootContainer.setLayoutParams(new LinearLayout.LayoutParams(-1, -1));
+
+        // 1. Asli YouTube Home Web View
+        ytHomeWeb = new WebView(this);
+        LinearLayout.LayoutParams ytParams = new LinearLayout.LayoutParams(-1, ytHeight);
+        ytHomeWeb.setLayoutParams(ytParams);
+        
+        // 2. Drag Handle Divider
+        dragHandle = new View(this);
+        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(-1, 25); // 25px thick click area
+        dragHandle.setLayoutParams(handleParams);
+        GradientDrawable handleLine = new GradientDrawable();
+        handleLine.setColor(android.graphics.Color.parseColor("#444444"));
+        handleLine.setCornerRadius(5f);
+        dragHandle.setBackground(handleLine);
+
+        // 3. Netlify Mixer Web View
+        web = new YTProWebView(this);
+        web.setId(R.id.web);
+        LinearLayout.LayoutParams netlifyParams = new LinearLayout.LayoutParams(-1, 0, 1.0f);
+        web.setLayoutParams(netlifyParams);
+
+        // Adding to layout hierarchy
+        rootContainer.addView(ytHomeWeb);
+        rootContainer.addView(dragHandle);
+        rootContainer.addView(web);
+        setContentView(rootContainer);
+
+        // Visibility Apply Karna Base States Se
+        ytHomeWeb.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
+        dragHandle.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
+
+        // 🛠️ DRAG SYSTEM IMPLEMENTATION (Upar-Niche Resize Script)
+        dragHandle.setOnTouchListener(new View.OnTouchListener() {
+            private float initialY;
+            private int initialHeight;
+
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        initialY = event.getRawY();
+                        initialHeight = ytHomeWeb.getHeight();
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        float deltaY = event.getRawY() - initialY;
+                        int newHeight = (int) (initialHeight + deltaY);
+                        
+                        // Limits: 200px se chhota aur Screen size se bada na ho sake
+                        if (newHeight > 200 && newHeight < (rootContainer.getHeight() - 300)) {
+                            ytHeight = newHeight;
+                            LinearLayout.LayoutParams p = (LinearLayout.LayoutParams) ytHomeWeb.getLayoutParams();
+                            p.height = newHeight;
+                            ytHomeWeb.setLayoutParams(p);
+                        }
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                        // Height setting local storage me save karna
+                        prefs.edit().putInt("yt_height", ytHeight).apply();
+                        return true;
+                }
+                return false;
+            }
+        });
+    }
+
     public void load(boolean dl) {
         this.dL = dl;
-        web = findViewById(R.id.web);
 
-        // --- MINIMAL EMOJI ZOOM TOGGLE BUTTON ---
+        // --- 📺 INTERACTIVE EMOJI TOGGLE CONTROLS ---
         if (findViewById(999999) == null) {
-            final android.widget.Button btnZoomToggle = new android.widget.Button(this);
-            btnZoomToggle.setId(999999); btnZoomToggle.setText("🔒");
-            GradientDrawable shape = new GradientDrawable();
-            shape.setShape(GradientDrawable.RECTANGLE);
-            shape.setCornerRadii(new float[] { 15, 15, 15, 15, 15, 15, 15, 15 });
-            shape.setColor(android.graphics.Color.parseColor("#77000000"));
-            shape.setStroke(1, android.graphics.Color.parseColor("#88FFFFFF"));
-            btnZoomToggle.setBackground(shape); btnZoomToggle.setTextColor(android.graphics.Color.WHITE);
-            btnZoomToggle.setTextSize(14f); btnZoomToggle.setPadding(15, 10, 15, 10);
-            android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(-2, -2);
-            params.gravity = android.view.Gravity.TOP | android.view.Gravity.RIGHT;
-            params.setMargins(0, 45, 10, 0);
-            addContentView(btnZoomToggle, params);
+            LinearLayout buttonBox = new LinearLayout(this);
+            buttonBox.setId(999999);
+            buttonBox.setOrientation(LinearLayout.HORIZONTAL);
+            
+            // A. Zoom Toggle Button (Bina Background/Padding)
+            final Button btnZoomToggle = new Button(this);
+            btnZoomToggle.setText(isZoomLocked ? "🔓" : "🔒");
+            btnZoomToggle.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+            btnZoomToggle.setPadding(0, 0, 0, 0);
+            btnZoomToggle.setTextSize(16f);
 
-            final boolean[] isZoomLocked = {false};
+            // B. YouTube Overlay Toggle Button (Bina Background/Padding)
+            final Button btnYtToggle = new Button(this);
+            btnYtToggle.setText(isYtVisible ? "📺" : "🌐");
+            btnYtToggle.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+            btnYtToggle.setPadding(0, 0, 0, 0);
+            btnYtToggle.setTextSize(16f);
+
+            LinearLayout.LayoutParams btnMargin = new LinearLayout.LayoutParams(-2, -2);
+            btnMargin.setMargins(15, 0, 15, 0);
+            buttonBox.addView(btnYtToggle, btnMargin);
+            buttonBox.addView(btnZoomToggle, btnMargin);
+
+            FrameLayout.LayoutParams boxParams = new FrameLayout.LayoutParams(-2, -2);
+            boxParams.gravity = android.view.Gravity.TOP | android.view.Gravity.RIGHT;
+            boxParams.setMargins(0, 45, 10, 0);
+            addContentView(buttonBox, boxParams);
+
+            // Initial Settings Apply
+            applyZoomState(isZoomLocked, btnZoomToggle);
+
+            // Zoom Listener
             btnZoomToggle.setOnClickListener(v -> {
-                if (!isZoomLocked[0]) {
-                    web.getSettings().setSupportZoom(false); web.getSettings().setBuiltInZoomControls(false);
-                    web.evaluateJavascript("var meta = document.querySelector('meta[name=viewport]'); if(!meta){ meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); } meta.setAttribute('content', 'width=1024, user-scalable=no');", null);
-                    btnZoomToggle.setText("🔓"); isZoomLocked[0] = true;
-                } else {
-                    web.getSettings().setSupportZoom(true); web.getSettings().setBuiltInZoomControls(true);
-                    web.evaluateJavascript("var meta = document.querySelector('meta[name=viewport]'); if(meta){ meta.setAttribute('content', 'width=1024, user-scalable=yes'); }", null);
-                    btnZoomToggle.setText("🔒"); isZoomLocked[0] = false;
-                }
+                isZoomLocked = !isZoomLocked;
+                applyZoomState(isZoomLocked, btnZoomToggle);
+                prefs.edit().putBoolean("zoom_locked", isZoomLocked).apply();
+            });
+
+            // YouTube Toggle Listener
+            btnYtToggle.setOnClickListener(v -> {
+                isYtVisible = !isYtVisible;
+                ytHomeWeb.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
+                dragHandle.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
+                btnYtToggle.setText(isYtVisible ? "📺" : "🌐");
+                prefs.edit().putBoolean("yt_visible", isYtVisible).apply();
             });
         }
 
+        // --- YT HOME WEB SETTINGS ---
+        ytHomeWeb.getSettings().setJavaScriptEnabled(true);
+        ytHomeWeb.getSettings().setUserAgentString("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+        ytHomeWeb.getSettings().setDomStorageEnabled(true);
+        ytHomeWeb.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                // ⚡ JADOOR SCRIPT INJECTION: Har video thumbnail par Load Left/Right button chipkana
+                injectDJButtonsSystem();
+            }
+        });
+        ytHomeWeb.loadUrl("https://m.youtube.com");
+
+        // --- NETLIFY WEB SETTINGS ---
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setUserAgentString("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
         web.getSettings().setUseWideViewPort(true);
         web.getSettings().setLoadWithOverviewMode(true);
         web.getSettings().setAllowFileAccess(true);
         web.getSettings().setAllowContentAccess(true);
-        web.getSettings().setSupportZoom(true); 
-        web.getSettings().setBuiltInZoomControls(true);
-        web.getSettings().setDisplayZoomControls(false);
         web.getSettings().setDomStorageEnabled(true);
         web.getSettings().setDatabaseEnabled(true);
         web.getSettings().setMediaPlaybackRequiresUserGesture(false); 
@@ -149,21 +265,77 @@ public class MainActivity extends Activity {
         }
 
         web.addJavascriptInterface(new WebAppInterface(this, web), "Android");
+        
+        // ⚡ NAYA WEB BRIDGE INTERFACE: YouTube web se video id Netlify me bypass karne ke liye
+        ytHomeWeb.addJavascriptInterface(new Object() {
+            @android.webkit.JavascriptInterface
+            public void sendToDeck(String deck, String videoId) {
+                runOnUiThread(() -> {
+                    String fullUrl = "https://www.youtube.com/watch?v=" + videoId;
+                    if ("left".equals(deck)) {
+                        // Netlify ke Left Box me text bhej kar automatic load karwana
+                        web.evaluateJavascript("var leftInput = document.querySelector('input[placeholder*=\"Paste YouTube URL\"], [placeholder*=\"left\"]'); " +
+                                "if(leftInput) { leftInput.value = '" + fullUrl + "'; leftInput.dispatchEvent(new Event('input', { bubbles: true })); }", null);
+                    } else {
+                        // Netlify ke Right Box me text bhej kar automatic load karwana
+                        web.evaluateJavascript("var rightInput = document.querySelector('input[placeholder*=\"Paste YouTube URL\"], [placeholder*=\"right\"]'); " +
+                                "if(rightInput) { rightInput.value = '" + fullUrl + "'; rightInput.dispatchEvent(new Event('input', { bubbles: true })); }", null);
+                    }
+                });
+            }
+        }, "DJBridge");
+
         web.setWebChromeClient(new YTProWebChromeClient(this, web));
         web.setWebViewClient(new YTProWebViewClient(this, web));
         web.loadUrl("https://kannujaat.netlify.app/");
 
         setupReceiver();
         setupBackNavigation();
-        streamManager = new BinaryStreamManager(web,this);
+        streamManager = new BinaryStreamManager(web, this);
 
-        // ⚡ ASALI JADOOR: App load hote hi DJ Notification Service ko turant chalu karna
+        // DJ Foreground service push
         Intent serviceIntent = new Intent(this, ForegroundService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent);
         } else {
             startService(serviceIntent);
         }
+    }
+
+    private void applyZoomState(boolean lock, Button btn) {
+        if (lock) {
+            web.getSettings().setSupportZoom(false);
+            web.getSettings().setBuiltInZoomControls(false);
+            web.evaluateJavascript("var meta = document.querySelector('meta[name=viewport]'); if(!meta){ meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); } meta.setAttribute('content', 'width=1024, user-scalable=no');", null);
+            btn.setText("🔓");
+        } else {
+            web.getSettings().setSupportZoom(true);
+            web.getSettings().setBuiltInZoomControls(true);
+            web.evaluateJavascript("var meta = document.querySelector('meta[name=viewport]'); if(meta){ meta.setAttribute('content', 'width=1024, user-scalable=yes'); }", null);
+            btn.setText("🔒");
+        }
+    }
+
+    private void injectDJButtonsSystem() {
+        // Yeh high-grade script har video card ko scan karke usme Left/Right trigger daal degi
+        String js = "setInterval(function() { " +
+                "  var videos = document.querySelectorAll('a[href*=\"/watch?v=\"]'); " +
+                "  videos.forEach(function(v) { " +
+                "    if(v.getAttribute('dj-hooked')) return; " +
+                "    v.setAttribute('dj-hooked', 'true'); " +
+                "    var urlObj = new URL(v.href); var vId = urlObj.searchParams.get('v'); " +
+                "    if(!vId) return; " +
+                "    var btnContainer = document.createElement('div'); " +
+                "    btnContainer.style = 'display:flex; gap:5px; padding:5px; background:#111; justify-content:center;'; " +
+                "    var bL = document.createElement('button'); bL.innerText='🎧 L'; bL.style='background:#34d399; color:#000; border:none; padding:4px 8px; font-size:11px; font-weight:bold; border-radius:4px;'; " +
+                "    bL.onclick = function(e) { e.preventDefault(); e.stopPropagation(); window.DJBridge.sendToDeck('left', vId); }; " +
+                "    var bR = document.createElement('button'); bR.innerText='🎛️ R'; bR.style='background:#22d3ee; color:#000; border:none; padding:4px 8px; font-size:11px; font-weight:bold; border-radius:4px;'; " +
+                "    bR.onclick = function(e) { e.preventDefault(); e.stopPropagation(); window.DJBridge.sendToDeck('right', vId); }; " +
+                "    btnContainer.appendChild(bL); btnContainer.appendChild(bR); " +
+                "    v.parentNode.insertBefore(btnContainer, v.nextSibling); " +
+                "  }); " +
+                "}, 2000);";
+        ytHomeWeb.evaluateJavascript(js, null);
     }
 
     public void openCustomAudioPopup(final ValueCallback<Uri[]> filePathCallback) {
@@ -237,7 +409,14 @@ public class MainActivity extends Activity {
     }
 
     private void handleBackPress() {
-        if (web.canGoBack()) { web.goBack(); } else { showExitDialog(); }
+        // Pehle check karega ki splitscreen wala YouTube back ja sakta hai kya
+        if (isYtVisible && ytHomeWeb.canGoBack()) {
+            ytHomeWeb.goBack();
+        } else if (web.canGoBack()) { 
+            web.goBack(); 
+        } else { 
+            showExitDialog(); 
+        }
     }
 
     private void showExitDialog() {
@@ -264,5 +443,12 @@ public class MainActivity extends Activity {
     @Override public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) { web.evaluateJavascript(isInPictureInPictureMode ? "PIPlayer();" : "removePIP();", null); isPip = isInPictureInPictureMode; }
     @Override protected void onUserLeaveHint() { super.onUserLeaveHint(); if (Build.VERSION.SDK_INT >= 26 && web.getUrl() != null && web.getUrl().contains("watch") && isPlaying) { try { isPip = true; enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(new Rational(portrait ? 9 : 16, portrait ? 16 : 9)).build()); } catch (IllegalStateException e) {} } }
     @Override protected void onPause() { super.onPause(); CookieManager.getInstance().flush(); }
-    @Override public void onDestroy() { super.onDestroy(); stopService(new Intent(getApplicationContext(), ForegroundService.class)); if (broadcastReceiver != null) unregisterReceiver(broadcastReceiver); if (streamManager != null) streamManager.cleanup(); }
+    
+    @Override 
+    public void onDestroy() { 
+        super.onDestroy(); 
+        stopService(new Intent(getApplicationContext(), ForegroundService.class)); 
+        if (broadcastReceiver != null) unregisterReceiver(broadcastReceiver); 
+        if (streamManager != null) streamManager.cleanup(); 
+    }
 }
