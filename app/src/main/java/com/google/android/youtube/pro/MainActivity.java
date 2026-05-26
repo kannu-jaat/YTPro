@@ -116,12 +116,11 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams ytParams = new LinearLayout.LayoutParams(-1, ytHeight);
         ytHomeWeb.setLayoutParams(ytParams);
         
-        // 🛠️ PINK DIVIDER FIX: Halka Pink (#ffb6c1) Rang Daal Diya
         dragHandle = new View(this);
         LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(-1, 20); 
         dragHandle.setLayoutParams(handleParams);
         GradientDrawable handleLine = new GradientDrawable();
-        handleLine.setColor(android.graphics.Color.parseColor("#ffb6c1"));
+        handleLine.setColor(android.graphics.Color.parseColor("#ffb6c1")); // Premium Pink
         handleLine.setCornerRadius(5f);
         dragHandle.setBackground(handleLine);
 
@@ -215,7 +214,6 @@ public class MainActivity extends Activity {
             });
         }
 
-        // --- 🛠️ MOBILE MODE FIX: Desktop UserAgent Hata Diya (Ekdum Clean Mobile UI Khulega) ---
         ytHomeWeb.getSettings().setJavaScriptEnabled(true);
         ytHomeWeb.getSettings().setDomStorageEnabled(true);
         ytHomeWeb.setWebViewClient(new WebViewClient() {
@@ -224,7 +222,6 @@ public class MainActivity extends Activity {
                 injectDJButtonsSystem();
             }
 
-            // 🛠️ CONFIRMATION POPUP ON CLICK: Galti se video click hone par hijacking popup
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 if (url.contains("watch?v=")) {
@@ -232,7 +229,7 @@ public class MainActivity extends Activity {
                     String videoId = uri.getQueryParameter("v");
                     if (videoId != null) {
                         showDeckConfirmationDialog(videoId, url);
-                        return true; // Click ko block karke apna popup dikhayenge
+                        return true; 
                     }
                 }
                 return false;
@@ -240,7 +237,6 @@ public class MainActivity extends Activity {
         });
         ytHomeWeb.loadUrl("https://m.youtube.com");
 
-        // --- NETLIFY WEB SETTINGS ---
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setUserAgentString("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
         web.getSettings().setUseWideViewPort(true);
@@ -260,7 +256,6 @@ public class MainActivity extends Activity {
 
         web.addJavascriptInterface(new WebAppInterface(this, web), "Android");
         
-        // ⚡ FIXED BRIDGE: Static query selectors badal diye hmesha correct boxes pakadne ke liye
         ytHomeWeb.addJavascriptInterface(new Object() {
             @android.webkit.JavascriptInterface
             public void sendToDeck(String deck, String videoId) {
@@ -311,7 +306,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // 🛠️ ASALI POPUP JADOOR: Thumbnail click hone par aane wala Pink Master Dialogue
     private void showDeckConfirmationDialog(String videoId, String originalUrl) {
         final Dialog dialog = new Dialog(this);
         dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
@@ -324,7 +318,7 @@ public class MainActivity extends Activity {
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(android.graphics.Color.parseColor("#1A1A1A"));
         bg.setCornerRadius(25f);
-        bg.setStroke(3, android.graphics.Color.parseColor("#ffb6c1")); // Matching Pink Border
+        bg.setStroke(3, android.graphics.Color.parseColor("#ffb6c1")); 
         mainLayout.setBackground(bg);
         mainLayout.setPadding(50, 50, 50, 50);
 
@@ -369,22 +363,20 @@ public class MainActivity extends Activity {
         dialog.setContentView(mainLayout);
 
         btnLeft.setOnClickListener(v -> {
-            // Direct Bridge bypass to left input box
             ytHomeWeb.evaluateJavascript("window.DJBridge.sendToDeck('left', '" + videoId + "');", null);
             dialog.dismiss();
         });
 
         btnRight.setOnClickListener(v -> {
-            // Direct Bridge bypass to right input box
             ytHomeWeb.evaluateJavascript("window.DJBridge.sendToDeck('right', '" + videoId + "');", null);
             dialog.dismiss();
         });
 
         btnWatch.setOnClickListener(v -> {
             dialog.dismiss();
-            ytHomeWeb.setWebViewClient(new WebViewClient()); // Temp bypass to load raw video
+            ytHomeWeb.setWebViewClient(new WebViewClient()); 
             ytHomeWeb.loadUrl(originalUrl);
-            ytHomeWeb.setWebViewClient(new WebViewClient() { // Restore hijack system
+            ytHomeWeb.setWebViewClient(new WebViewClient() { 
                 @Override public void onPageFinished(WebView view, String url) { injectDJButtonsSystem(); }
                 @Override public boolean shouldOverrideUrlLoading(WebView view, String url) {
                     if (url.contains("watch?v=")) {
@@ -413,7 +405,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ⚡ FIXED INJECTION SCRIPT: Mobile mode ke elements ke sath sync kar diya
+    // 🛠️ FIX SYSTEM: `.contains()` ko badal kar pure JS `.includes()` kar diya hai
     private void injectDJButtonsSystem() {
         String js = "setInterval(function() { " +
                 "  var videos = document.querySelectorAll('a[href*=\"/watch?v=\"]'); " +
@@ -421,7 +413,7 @@ public class MainActivity extends Activity {
                 "    if(v.getAttribute('dj-hooked')) return; " +
                 "    v.setAttribute('dj-hooked', 'true'); " +
                 "    var hrefText = v.href; " +
-                "    if(!hrefText.contains('watch?v=')) return; " +
+                "    if(!hrefText.includes('watch?v=')) return; " +
                 "    var parts = hrefText.split('v='); if(parts.length < 2) return; " +
                 "    var vId = parts[1].split('&')[0]; " +
                 "    var btnContainer = document.createElement('div'); " +
@@ -488,6 +480,7 @@ public class MainActivity extends Activity {
     @Override public void onBackPressed() { handleBackPress(); }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) { super.onRequestPermissionsResult(requestCode, permissions, grantResults); if (requestCode == 101) { web.loadUrl("https://kannujaat.netlify.app/"); } }
     @Override public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) { web.evaluateJavascript(isInPictureInPictureMode ? "PIPlayer();" : "removePIP();", null); isPip = isInPictureInPictureMode; }
+    @Override protected void onUserLeaveHint() { super.onUserLeaveHint(); if (Build.VERSION.SDK_INT >= 26 && web.getUrl() != null && web.getUrl().contains("watch") && isPlaying) { try { isPip = true; enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(new Rational(portrait ? 9 : 16, portrait ? 16 : 9)).build()); } catch (IllegalStateException e) {} } }
     @Override protected void onUserLeaveHint() { super.onUserLeaveHint(); if (Build.VERSION.SDK_INT >= 26 && web.getUrl() != null && web.getUrl().contains("watch") && isPlaying) { try { isPip = true; enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(new Rational(portrait ? 9 : 16, portrait ? 16 : 9)).build()); } catch (IllegalStateException e) {} } }
     @Override protected void onPause() { super.onPause(); CookieManager.getInstance().flush(); }
     @Override public void onDestroy() { super.onDestroy(); stopService(new Intent(getApplicationContext(), ForegroundService.class)); if (broadcastReceiver != null) unregisterReceiver(broadcastReceiver); if (streamManager != null) streamManager.cleanup(); }
