@@ -214,16 +214,23 @@ public class MainActivity extends Activity {
             });
         }
 
+        // 🛡️ THE PRO FIX: Asli YouTube (Top screen) ko bhi Adblocker & Background Play de diya
         ytHomeWeb.getSettings().setJavaScriptEnabled(true);
         ytHomeWeb.getSettings().setDomStorageEnabled(true);
-        ytHomeWeb.setWebViewClient(new WebViewClient() {
+        ytHomeWeb.getSettings().setDatabaseEnabled(true);
+        ytHomeWeb.getSettings().setMediaPlaybackRequiresUserGesture(false); 
+        
+        ytHomeWeb.setWebViewClient(new YTProWebViewClient(this, ytHomeWeb) {
             @Override
             public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
                 injectDJButtonsSystem();
             }
         });
+        ytHomeWeb.setWebChromeClient(new YTProWebChromeClient(this, ytHomeWeb));
         ytHomeWeb.loadUrl("https://m.youtube.com");
 
+        // ⚡ NETLIFY CACHE FIX: Decks ab pehli baar me hi show honge
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setUserAgentString("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
         web.getSettings().setUseWideViewPort(true);
@@ -232,6 +239,7 @@ public class MainActivity extends Activity {
         web.getSettings().setAllowContentAccess(true);
         web.getSettings().setDomStorageEnabled(true);
         web.getSettings().setDatabaseEnabled(true);
+        web.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_DEFAULT);
         web.getSettings().setMediaPlaybackRequiresUserGesture(false); 
         web.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
@@ -243,32 +251,23 @@ public class MainActivity extends Activity {
 
         web.addJavascriptInterface(new WebAppInterface(this, web), "Android");
         
-        // ⚡ THE ULTIMATE BRIDGE (Connected directly to your HTML IDs)
+        // ⚡ BRIDGE: Bypass to Left/Right Input and show Popup
         ytHomeWeb.addJavascriptInterface(new Object() {
-            
-            // 1. Send to Netlify Decks automatically
             @android.webkit.JavascriptInterface
             public void sendToDeck(String deck, String videoId) {
                 runOnUiThread(() -> {
                     String fullUrl = "https://www.youtube.com/watch?v=" + videoId;
                     String inputId = "left".equals(deck) ? "leftUrl" : "rightUrl";
-                    
-                    // Direct HTML ID attack (Using your input listener to trigger auto-load)
                     web.evaluateJavascript(
                         "var el = document.getElementById('" + inputId + "'); " +
-                        "if(el) { " +
-                        "  el.value = '" + fullUrl + "'; " +
-                        "  el.dispatchEvent(new Event('input', { bubbles: true })); " +
-                        "}", null);
+                        "if(el) { el.value = '" + fullUrl + "'; el.dispatchEvent(new Event('input', { bubbles: true })); }", null);
                 });
             }
 
-            // 2. Trigger the Popup when user clicks a YouTube Thumbnail/Title
             @android.webkit.JavascriptInterface
             public void showPopup(String videoId, String url) {
                 runOnUiThread(() -> showDeckConfirmationDialog(videoId, url));
             }
-            
         }, "DJBridge");
 
         web.setWebChromeClient(new YTProWebChromeClient(this, web));
@@ -366,14 +365,14 @@ public class MainActivity extends Activity {
         btnLayout.setPadding(0, 30, 0, 20);
 
         Button btnLeft = new Button(this);
-        btnLeft.setText("🎧 L"); // Shortened Text
+        btnLeft.setText("🎧 L"); 
         btnLeft.setTextColor(android.graphics.Color.BLACK);
         btnLeft.setTextSize(14f);
         GradientDrawable bL = new GradientDrawable(); bL.setColor(android.graphics.Color.parseColor("#34d399")); bL.setCornerRadius(12f);
         btnLeft.setBackground(bL);
 
         Button btnRight = new Button(this);
-        btnRight.setText("🎛️ R"); // Shortened Text
+        btnRight.setText("🎛️ R"); 
         btnRight.setTextColor(android.graphics.Color.BLACK);
         btnRight.setTextSize(14f);
         GradientDrawable bR = new GradientDrawable(); bR.setColor(android.graphics.Color.parseColor("#22d3ee")); bR.setCornerRadius(12f);
@@ -407,7 +406,7 @@ public class MainActivity extends Activity {
 
         btnWatch.setOnClickListener(v -> {
             dialog.dismiss();
-            ytHomeWeb.loadUrl(originalUrl);
+            ytHomeWeb.loadUrl(originalUrl); // Zabardasti link open kar dega bypass karke
         });
 
         dialog.show();
@@ -427,31 +426,35 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ⚡ SUPER HIJACK INJECTOR (Blocks clicks + Direct ID loading)
+    // 🛡️ THE INVISIBLE SHIELD: YouTube SPA Clicks block karke seedha Popup layega
     private void injectDJButtonsSystem() {
-        String js = "setInterval(function() { " +
+        String js = "if(!window.djShieldActive) { " +
+                "  window.djShieldActive = true; " +
+                "  document.addEventListener('click', function(e) { " +
+                "    var customBtn = e.target.closest('.dj-btn-custom'); " +
+                "    if(customBtn) return; " + 
+                "    var link = e.target.closest('a[href*=\"/watch?v=\"]'); " +
+                "    if(link) { " +
+                "      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); " +
+                "      var match = link.href.match(/[?&]v=([^&]+)/); " +
+                "      if(match) { window.DJBridge.showPopup(match[1], link.href); } " +
+                "    } " +
+                "  }, true); " +
+                "}" +
+                "setInterval(function() { " +
                 "  var links = document.querySelectorAll('a[href*=\"/watch?v=\"]'); " +
                 "  links.forEach(function(link) { " +
                 "    if(link.getAttribute('dj-hooked')) return; " +
                 "    link.setAttribute('dj-hooked', 'true'); " +
-                "    var hrefText = link.href; " +
-                "    var match = hrefText.match(/[?&]v=([^&]+)/); " +
+                "    var match = link.href.match(/[?&]v=([^&]+)/); " +
                 "    if(!match) return; " +
                 "    var vId = match[1]; " +
-                
-                // 1. Hijack the actual click to show the Popup instead of playing video
-                "    link.addEventListener('click', function(e) { " +
-                "        e.preventDefault(); e.stopPropagation(); " +
-                "        window.DJBridge.showPopup(vId, hrefText); " +
-                "    }); " +
-                
-                // 2. Append Load Left & Right Buttons
                 "    var btnContainer = document.createElement('div'); " +
                 "    btnContainer.style = 'display:flex; gap:10px; padding:6px; background:#181818; justify-content:center; width:100%; margin-top:4px; border-radius:6px;'; " +
-                "    var bL = document.createElement('button'); bL.innerText='🎧 L'; bL.style='background:#34d399; color:#000; border:none; padding:8px 12px; font-size:13px; font-weight:bold; border-radius:6px; flex:1;'; " +
-                "    bL.onclick = function(e) { e.preventDefault(); e.stopPropagation(); window.DJBridge.sendToDeck('left', vId); }; " +
-                "    var bR = document.createElement('button'); bR.innerText='🎛️ R'; bR.style='background:#22d3ee; color:#000; border:none; padding:8px 12px; font-size:13px; font-weight:bold; border-radius:6px; flex:1;'; " +
-                "    bR.onclick = function(e) { e.preventDefault(); e.stopPropagation(); window.DJBridge.sendToDeck('right', vId); }; " +
+                "    var bL = document.createElement('button'); bL.className='dj-btn-custom'; bL.innerText='🎧 L'; bL.style='background:#34d399; color:#000; border:none; padding:8px 12px; font-size:13px; font-weight:bold; border-radius:6px; flex:1;'; " +
+                "    bL.onclick = function(e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); window.DJBridge.sendToDeck('left', vId); }; " +
+                "    var bR = document.createElement('button'); bR.className='dj-btn-custom'; bR.innerText='🎛️ R'; bR.style='background:#22d3ee; color:#000; border:none; padding:8px 12px; font-size:13px; font-weight:bold; border-radius:6px; flex:1;'; " +
+                "    bR.onclick = function(e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); window.DJBridge.sendToDeck('right', vId); }; " +
                 "    btnContainer.appendChild(bL); btnContainer.appendChild(bR); " +
                 "    link.parentNode.insertBefore(btnContainer, link.nextSibling); " +
                 "  }); " +
