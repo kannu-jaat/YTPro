@@ -67,6 +67,9 @@ public class MainActivity extends Activity {
     public BinaryStreamManager streamManager;
     private SharedPreferences prefs;
 
+    // ⚡ NAYA HELPER: YouTube Notification ke liye
+    private YTMediaSessionManager ytMediaSessionManager;
+
     private int ytHeight = 600; 
     private boolean isYtVisible = true;
     private boolean isZoomLocked = false;
@@ -93,6 +96,9 @@ public class MainActivity extends Activity {
         isZoomLocked = prefs.getBoolean("zoom_locked", false);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        
+        // ⚡ NAYI FILE YAHAN CONNECT HUI HAI
+        setupYTSessionManager();
         setupDynamicLayout();
 
         if (Build.VERSION.SDK_INT >= 33) {
@@ -106,6 +112,32 @@ public class MainActivity extends Activity {
         }
         
         load(false);
+    }
+
+    // 🔔 NAYA FUNCTION: Notification panel ke buttons dabne par kya hoga
+    private void setupYTSessionManager() {
+        ytMediaSessionManager = new YTMediaSessionManager(this, new YTMediaSessionManager.YTActionCallback() {
+            @Override
+            public void onPlay() {
+                if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.play();", null);
+            }
+            @Override
+            public void onPause() {
+                if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.pause();", null);
+            }
+            @Override
+            public void onNext() {
+                if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var next = document.querySelector('.ytm-autonav-endscreen-upnext-play-button'); if(next) next.click();", null);
+            }
+            @Override
+            public void onPrev() {
+                if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.currentTime = 0;", null);
+            }
+            @Override
+            public void onClose() {
+                if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.pause();", null);
+            }
+        });
     }
 
     private void setupDynamicLayout() {
@@ -250,6 +282,7 @@ public class MainActivity extends Activity {
 
         web.addJavascriptInterface(new WebAppInterface(this, web), "Android");
         
+        // ⚡ BRIDGE: Ab isme 'updateYTMedia' bhi daal diya
         ytHomeWeb.addJavascriptInterface(new Object() {
             @android.webkit.JavascriptInterface
             public void sendToDeck(String deck, String videoId) {
@@ -265,6 +298,15 @@ public class MainActivity extends Activity {
             @android.webkit.JavascriptInterface
             public void showPopup(String videoId, String url) {
                 runOnUiThread(() -> showDeckConfirmationDialog(videoId, url));
+            }
+
+            @android.webkit.JavascriptInterface
+            public void updateYTMedia(boolean isPlaying, String title, String artist) {
+                runOnUiThread(() -> {
+                    if (ytMediaSessionManager != null) {
+                        ytMediaSessionManager.updateNotification(isPlaying, title, artist, null);
+                    }
+                });
             }
         }, "DJBridge");
 
@@ -404,7 +446,7 @@ public class MainActivity extends Activity {
 
         btnWatch.setOnClickListener(v -> {
             dialog.dismiss();
-            ytHomeWeb.loadUrl(originalUrl);
+            ytHomeWeb.loadUrl(originalUrl); 
         });
 
         dialog.show();
@@ -424,11 +466,10 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ⚡ THE ULTIMATE SCRIPT: Dynamic IDs, Invisible Click Shield & Auto Ad Skipper
+    // ⚡ FULL VIP SCRIPT: Blocks clicks, Fast-Forwards Ads, Realtime IDs & Notifies Playback!
     private void injectDJButtonsSystem() {
         String js = "if(!window.djShieldActive) { " +
                 "  window.djShieldActive = true; " +
-                // INVISIBLE SHIELD: Blocks clicks and shows popup
                 "  document.addEventListener('click', function(e) { " +
                 "    var customBtn = e.target.closest('.dj-btn-custom'); " +
                 "    if(customBtn) return; " + 
@@ -442,41 +483,46 @@ public class MainActivity extends Activity {
                 "}" +
                 
                 "setInterval(function() { " +
-                // 1. ADD L/R BUTTONS WITH DYNAMIC URL FETCHING
+                // 1. ADD L/R BUTTONS (Dynamic Fetching for Popular/Oldest bug)
                 "  var links = document.querySelectorAll('a[href*=\"/watch?v=\"]'); " +
                 "  links.forEach(function(link) { " +
                 "    if(link.getAttribute('dj-hooked')) return; " +
                 "    link.setAttribute('dj-hooked', 'true'); " +
-                
                 "    var btnContainer = document.createElement('div'); " +
                 "    btnContainer.style = 'display:flex; gap:10px; padding:6px; background:#181818; justify-content:center; width:100%; margin-top:4px; border-radius:6px;'; " +
-                
                 "    var bL = document.createElement('button'); bL.className='dj-btn-custom'; bL.innerText='🎧 L'; bL.style='background:#34d399; color:#000; border:none; padding:8px 12px; font-size:13px; font-weight:bold; border-radius:6px; flex:1;'; " +
                 "    bL.onclick = function(e) { " +
                 "       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); " +
-                "       var currentHref = link.href; " + // Real-time ID fetch (Fixes Oldest/Popular Bug)
-                "       var m = currentHref.match(/[?&]v=([^&]+)/); " +
+                "       var m = link.href.match(/[?&]v=([^&]+)/); " +
                 "       if(m) window.DJBridge.sendToDeck('left', m[1]); " +
                 "    }; " +
-                
                 "    var bR = document.createElement('button'); bR.className='dj-btn-custom'; bR.innerText='🎛️ R'; bR.style='background:#22d3ee; color:#000; border:none; padding:8px 12px; font-size:13px; font-weight:bold; border-radius:6px; flex:1;'; " +
                 "    bR.onclick = function(e) { " +
                 "       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); " +
-                "       var currentHref = link.href; " + // Real-time ID fetch (Fixes Oldest/Popular Bug)
-                "       var m = currentHref.match(/[?&]v=([^&]+)/); " +
+                "       var m = link.href.match(/[?&]v=([^&]+)/); " +
                 "       if(m) window.DJBridge.sendToDeck('right', m[1]); " +
                 "    }; " +
-                
                 "    btnContainer.appendChild(bL); btnContainer.appendChild(bR); " +
                 "    link.parentNode.insertBefore(btnContainer, link.nextSibling); " +
                 "  }); " +
                 
-                // 2. SILENT AD SKIPPER (Bypasses instream video ads instantly)
-                "  var adBox = document.querySelector('.ad-showing'); " +
+                // 2. THE SNIPER AD SKIPPER
+                "  var adBox = document.querySelector('.ad-showing, .ad-interrupting'); " +
                 "  var vid = document.querySelector('video'); " +
-                "  if(adBox && vid) { vid.currentTime = vid.duration; } " + // Fast forwards ad
-                "  var skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern'); " +
-                "  if(skipBtn) { skipBtn.click(); } " + // Clicks skip button
+                "  if(adBox && vid && !isNaN(vid.duration)) { vid.currentTime = vid.duration; } " +
+                "  var skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button'); " +
+                "  if(skipBtn) { skipBtn.click(); } " +
+                
+                // 3. MEDIA STATE SYNCER (For Notification 2002)
+                "  if(vid && vid.src) { " +
+                "     var isPlaying = !vid.paused; " +
+                "     var title = document.title ? document.title.replace(' - YouTube', '') : 'YouTube Audio'; " +
+                "     if (window.lastYTState !== isPlaying || window.lastYTTitle !== title) { " +
+                "         window.lastYTState = isPlaying; " +
+                "         window.lastYTTitle = title; " +
+                "         window.DJBridge.updateYTMedia(isPlaying, title, 'YouTube Player'); " +
+                "     } " +
+                "  } " +
                 "}, 1000);";
         ytHomeWeb.evaluateJavascript(js, null);
     }
@@ -532,7 +578,24 @@ public class MainActivity extends Activity {
     @Override public void onBackPressed() { handleBackPress(); }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) { super.onRequestPermissionsResult(requestCode, permissions, grantResults); if (requestCode == 101) { web.loadUrl("https://kannujaat.netlify.app/"); } }
     @Override public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) { web.evaluateJavascript(isInPictureInPictureMode ? "PIPlayer();" : "removePIP();", null); isPip = isInPictureInPictureMode; }
-    @Override protected void onUserLeaveHint() { super.onUserLeaveHint(); if (Build.VERSION.SDK_INT >= 26 && web.getUrl() != null && web.getUrl().contains("watch") && isPlaying) { try { isPip = true; enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(new Rational(portrait ? 9 : 16, portrait ? 16 : 9)).build()); } catch (IllegalStateException e) {} } }
-    @Override protected void onPause() { super.onPause(); CookieManager.getInstance().flush(); }
-    @Override public void onDestroy() { super.onDestroy(); stopService(new Intent(getApplicationContext(), ForegroundService.class)); if (broadcastReceiver != null) unregisterReceiver(broadcastReceiver); if (streamManager != null) streamManager.cleanup(); }
+    
+    @Override 
+    protected void onUserLeaveHint() { 
+        super.onUserLeaveHint(); 
+        if (Build.VERSION.SDK_INT >= 26 && web.getUrl() != null && web.getUrl().contains("watch") && isPlaying) { 
+            try { isPip = true; enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(new Rational(portrait ? 9 : 16, portrait ? 16 : 9)).build()); } catch (IllegalStateException e) {} 
+        } 
+    }
+    
+    @Override 
+    protected void onPause() { super.onPause(); CookieManager.getInstance().flush(); }
+    
+    @Override 
+    public void onDestroy() { 
+        super.onDestroy(); 
+        stopService(new Intent(getApplicationContext(), ForegroundService.class)); 
+        if (broadcastReceiver != null) unregisterReceiver(broadcastReceiver); 
+        if (streamManager != null) streamManager.cleanup(); 
+        if (ytMediaSessionManager != null) ytMediaSessionManager.destroy(); // 🧹 Memory Leak se bachne ke liye
+    }
 }
