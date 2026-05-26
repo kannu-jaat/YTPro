@@ -120,7 +120,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(-1, 20); 
         dragHandle.setLayoutParams(handleParams);
         GradientDrawable handleLine = new GradientDrawable();
-        handleLine.setColor(android.graphics.Color.parseColor("#ffb6c1"));
+        handleLine.setColor(android.graphics.Color.parseColor("#ffb6c1")); 
         handleLine.setCornerRadius(5f);
         dragHandle.setBackground(handleLine);
 
@@ -221,19 +221,6 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 injectDJButtonsSystem();
             }
-
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                if (url.contains("watch?v=")) {
-                    Uri uri = Uri.parse(url);
-                    String videoId = uri.getQueryParameter("v");
-                    if (videoId != null) {
-                        showDeckConfirmationDialog(videoId, url);
-                        return true; 
-                    }
-                }
-                return false;
-            }
         });
         ytHomeWeb.loadUrl("https://m.youtube.com");
 
@@ -256,38 +243,32 @@ public class MainActivity extends Activity {
 
         web.addJavascriptInterface(new WebAppInterface(this, web), "Android");
         
+        // ⚡ THE ULTIMATE BRIDGE (Connected directly to your HTML IDs)
         ytHomeWeb.addJavascriptInterface(new Object() {
+            
+            // 1. Send to Netlify Decks automatically
             @android.webkit.JavascriptInterface
             public void sendToDeck(String deck, String videoId) {
                 runOnUiThread(() -> {
                     String fullUrl = "https://www.youtube.com/watch?v=" + videoId;
-                    if ("left".equals(deck)) {
-                        web.evaluateJavascript(
-                            "(function() { " +
-                            "  var inputs = document.querySelectorAll('input'); " +
-                            "  for(var i=0; i<inputs.length; i++) { " +
-                            "    if(inputs[i].placeholder && (inputs[i].placeholder.toLowerCase().includes('left') || inputs[i].parentNode.innerText.toLowerCase().includes('left'))) { " +
-                            "      inputs[i].value = '" + fullUrl + "'; " +
-                            "      inputs[i].dispatchEvent(new Event('input', { bubbles: true })); " +
-                            "      break; " +
-                            "    } " +
-                            "  } " +
-                            "})();", null);
-                    } else {
-                        web.evaluateJavascript(
-                            "(function() { " +
-                            "  var inputs = document.querySelectorAll('input'); " +
-                            "  for(var i=0; i<inputs.length; i++) { " +
-                            "    if(inputs[i].placeholder && (inputs[i].placeholder.toLowerCase().includes('right') || inputs[i].parentNode.innerText.toLowerCase().includes('right'))) { " +
-                            "      inputs[i].value = '" + fullUrl + "'; " +
-                            "      inputs[i].dispatchEvent(new Event('input', { bubbles: true })); " +
-                            "      break; " +
-                            "    } " +
-                            "  } " +
-                            "})();", null);
-                    }
+                    String inputId = "left".equals(deck) ? "leftUrl" : "rightUrl";
+                    
+                    // Direct HTML ID attack (Using your input listener to trigger auto-load)
+                    web.evaluateJavascript(
+                        "var el = document.getElementById('" + inputId + "'); " +
+                        "if(el) { " +
+                        "  el.value = '" + fullUrl + "'; " +
+                        "  el.dispatchEvent(new Event('input', { bubbles: true })); " +
+                        "}", null);
                 });
             }
+
+            // 2. Trigger the Popup when user clicks a YouTube Thumbnail/Title
+            @android.webkit.JavascriptInterface
+            public void showPopup(String videoId, String url) {
+                runOnUiThread(() -> showDeckConfirmationDialog(videoId, url));
+            }
+            
         }, "DJBridge");
 
         web.setWebChromeClient(new YTProWebChromeClient(this, web));
@@ -306,7 +287,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // 🛠️ RESTORED LOCAL FILE MANAGER POPUP (Iske bina WebChromeClient error dega)
     public void openCustomAudioPopup(final ValueCallback<Uri[]> filePathCallback) {
         final ArrayList<AudioModel> allTracks = new ArrayList<>();
         final ArrayList<AudioModel> displayList = new ArrayList<>();
@@ -386,14 +366,16 @@ public class MainActivity extends Activity {
         btnLayout.setPadding(0, 30, 0, 20);
 
         Button btnLeft = new Button(this);
-        btnLeft.setText("🎧 LEFT");
+        btnLeft.setText("🎧 L"); // Shortened Text
         btnLeft.setTextColor(android.graphics.Color.BLACK);
+        btnLeft.setTextSize(14f);
         GradientDrawable bL = new GradientDrawable(); bL.setColor(android.graphics.Color.parseColor("#34d399")); bL.setCornerRadius(12f);
         btnLeft.setBackground(bL);
 
         Button btnRight = new Button(this);
-        btnRight.setText("🎛️ RIGHT");
+        btnRight.setText("🎛️ R"); // Shortened Text
         btnRight.setTextColor(android.graphics.Color.BLACK);
+        btnRight.setTextSize(14f);
         GradientDrawable bR = new GradientDrawable(); bR.setColor(android.graphics.Color.parseColor("#22d3ee")); bR.setCornerRadius(12f);
         btnRight.setBackground(bR);
 
@@ -404,9 +386,9 @@ public class MainActivity extends Activity {
         mainLayout.addView(btnLayout);
 
         Button btnWatch = new Button(this);
-        btnWatch.setText("▶️ Play inside YouTube");
+        btnWatch.setText("▶️ Play on YouTube");
         btnWatch.setTextColor(android.graphics.Color.WHITE);
-        btnWatch.setTextSize(12f);
+        btnWatch.setTextSize(14f);
         GradientDrawable bW = new GradientDrawable(); bW.setColor(android.graphics.Color.parseColor("#333333")); bW.setCornerRadius(12f);
         btnWatch.setBackground(bW);
         mainLayout.addView(btnWatch, new LinearLayout.LayoutParams(-1, -2));
@@ -425,18 +407,7 @@ public class MainActivity extends Activity {
 
         btnWatch.setOnClickListener(v -> {
             dialog.dismiss();
-            ytHomeWeb.setWebViewClient(new WebViewClient()); 
             ytHomeWeb.loadUrl(originalUrl);
-            ytHomeWeb.setWebViewClient(new WebViewClient() { 
-                @Override public void onPageFinished(WebView view, String url) { injectDJButtonsSystem(); }
-                @Override public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                    if (url.contains("watch?v=")) {
-                        Uri uri = Uri.parse(url); String vId = uri.getQueryParameter("v");
-                        if (vId != null) { showDeckConfirmationDialog(vId, url); return true; }
-                    }
-                    return false;
-                }
-            });
         });
 
         dialog.show();
@@ -456,26 +427,35 @@ public class MainActivity extends Activity {
         }
     }
 
+    // ⚡ SUPER HIJACK INJECTOR (Blocks clicks + Direct ID loading)
     private void injectDJButtonsSystem() {
         String js = "setInterval(function() { " +
-                "  var videos = document.querySelectorAll('a[href*=\"/watch?v=\"]'); " +
-                "  videos.forEach(function(v) { " +
-                "    if(v.getAttribute('dj-hooked')) return; " +
-                "    v.setAttribute('dj-hooked', 'true'); " +
-                "    var hrefText = v.href; " +
-                "    if(!hrefText.includes('watch?v=')) return; " +
-                "    var parts = hrefText.split('v='); if(parts.length < 2) return; " +
-                "    var vId = parts[1].split('&')[0]; " +
+                "  var links = document.querySelectorAll('a[href*=\"/watch?v=\"]'); " +
+                "  links.forEach(function(link) { " +
+                "    if(link.getAttribute('dj-hooked')) return; " +
+                "    link.setAttribute('dj-hooked', 'true'); " +
+                "    var hrefText = link.href; " +
+                "    var match = hrefText.match(/[?&]v=([^&]+)/); " +
+                "    if(!match) return; " +
+                "    var vId = match[1]; " +
+                
+                // 1. Hijack the actual click to show the Popup instead of playing video
+                "    link.addEventListener('click', function(e) { " +
+                "        e.preventDefault(); e.stopPropagation(); " +
+                "        window.DJBridge.showPopup(vId, hrefText); " +
+                "    }); " +
+                
+                // 2. Append Load Left & Right Buttons
                 "    var btnContainer = document.createElement('div'); " +
-                "    btnContainer.style = 'display:flex; gap:15px; padding:8px; background:#181818; justify-content:center; width:100%; margin-top:2px; margin-bottom:5px; border-radius:6px;'; " +
-                "    var bL = document.createElement('button'); bL.innerText='🎧 Load Left'; bL.style='background:#34d399; color:#000; border:none; padding:6px 14px; font-size:12px; font-weight:bold; border-radius:6px; flex:1;'; " +
+                "    btnContainer.style = 'display:flex; gap:10px; padding:6px; background:#181818; justify-content:center; width:100%; margin-top:4px; border-radius:6px;'; " +
+                "    var bL = document.createElement('button'); bL.innerText='🎧 L'; bL.style='background:#34d399; color:#000; border:none; padding:8px 12px; font-size:13px; font-weight:bold; border-radius:6px; flex:1;'; " +
                 "    bL.onclick = function(e) { e.preventDefault(); e.stopPropagation(); window.DJBridge.sendToDeck('left', vId); }; " +
-                "    var bR = document.createElement('button'); bR.innerText='🎛️ Load Right'; bR.style='background:#22d3ee; color:#000; border:none; padding:6px 14px; font-size:12px; font-weight:bold; border-radius:6px; flex:1;'; " +
+                "    var bR = document.createElement('button'); bR.innerText='🎛️ R'; bR.style='background:#22d3ee; color:#000; border:none; padding:8px 12px; font-size:13px; font-weight:bold; border-radius:6px; flex:1;'; " +
                 "    bR.onclick = function(e) { e.preventDefault(); e.stopPropagation(); window.DJBridge.sendToDeck('right', vId); }; " +
                 "    btnContainer.appendChild(bL); btnContainer.appendChild(bR); " +
-                "    v.parentNode.insertBefore(btnContainer, v.nextSibling); " +
+                "    link.parentNode.insertBefore(btnContainer, link.nextSibling); " +
                 "  }); " +
-                "}, 2000);";
+                "}, 1500);";
         ytHomeWeb.evaluateJavascript(js, null);
     }
 
