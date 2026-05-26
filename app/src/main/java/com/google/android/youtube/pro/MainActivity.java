@@ -56,7 +56,6 @@ public class MainActivity extends Activity {
 
     private YTProWebView web;
     private MediaCommandReceiver broadcastReceiver;
-    private BroadcastReceiver legacyWebsiteReceiver; // Website ka event pakadne ke liye
     private OnBackInvokedCallback backCallback;
     public BinaryStreamManager streamManager;
 
@@ -157,6 +156,14 @@ public class MainActivity extends Activity {
         setupReceiver();
         setupBackNavigation();
         streamManager = new BinaryStreamManager(web,this);
+
+        // ⚡ ASALI JADOOR: App load hote hi DJ Notification Service ko turant chalu karna
+        Intent serviceIntent = new Intent(this, ForegroundService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent);
+        } else {
+            startService(serviceIntent);
+        }
     }
 
     public void openCustomAudioPopup(final ValueCallback<Uri[]> filePathCallback) {
@@ -210,32 +217,14 @@ public class MainActivity extends Activity {
     }
 
     private void setupReceiver() {
-        // 1. Naya DJ Panel Receiver
         broadcastReceiver = new MediaCommandReceiver(web);
         IntentFilter filter = new IntentFilter();
         filter.addAction("LEFT_TOGGLE"); filter.addAction("RIGHT_TOGGLE"); filter.addAction("XFADER_LEFT"); filter.addAction("XFADER_RIGHT");
         
-        // 2. 🔌 WEBSITE BRIDGE (Jab website background play chalu karegi, toh hum apni Service start kar denge)
-        legacyWebsiteReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                // Website se koi bhi background play call aaye, hamari DJ service turant fire up ho jaye!
-                Intent serviceIntent = new Intent(context, ForegroundService.class);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(serviceIntent);
-                } else {
-                    context.startService(serviceIntent);
-                }
-            }
-        };
-        IntentFilter legacyFilter = new IntentFilter("UPDATE_NOTIFICATION");
-
         if (Build.VERSION.SDK_INT >= 34 && getApplicationInfo().targetSdkVersion >= 34) {
             registerReceiver(broadcastReceiver, filter, RECEIVER_EXPORTED);
-            registerReceiver(legacyWebsiteReceiver, legacyFilter, RECEIVER_EXPORTED);
         } else {
             registerReceiver(broadcastReceiver, filter);
-            registerReceiver(legacyWebsiteReceiver, legacyFilter);
         }
     }
 
@@ -275,5 +264,5 @@ public class MainActivity extends Activity {
     @Override public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) { web.evaluateJavascript(isInPictureInPictureMode ? "PIPlayer();" : "removePIP();", null); isPip = isInPictureInPictureMode; }
     @Override protected void onUserLeaveHint() { super.onUserLeaveHint(); if (Build.VERSION.SDK_INT >= 26 && web.getUrl() != null && web.getUrl().contains("watch") && isPlaying) { try { isPip = true; enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(new Rational(portrait ? 9 : 16, portrait ? 16 : 9)).build()); } catch (IllegalStateException e) {} } }
     @Override protected void onPause() { super.onPause(); CookieManager.getInstance().flush(); }
-    @Override public void onDestroy() { super.onDestroy(); stopService(new Intent(getApplicationContext(), ForegroundService.class)); if (broadcastReceiver != null) unregisterReceiver(broadcastReceiver); if (legacyWebsiteReceiver != null) unregisterReceiver(legacyWebsiteReceiver); if (streamManager != null) streamManager.cleanup(); }
+    @Override public void onDestroy() { super.onDestroy(); stopService(new Intent(getApplicationContext(), ForegroundService.class)); if (broadcastReceiver != null) unregisterReceiver(broadcastReceiver); if (streamManager != null) streamManager.cleanup(); }
 }
