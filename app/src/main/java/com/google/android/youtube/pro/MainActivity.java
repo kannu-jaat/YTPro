@@ -56,9 +56,9 @@ public class MainActivity extends Activity {
     public boolean isPip = false;
     public boolean dL = false;
 
-    private YTProWebView web; // Netlify Web
-    private WebView ytHomeWeb; // Naya YouTube Web
-    private View dragHandle;  // Resizer Line
+    private YTProWebView web; 
+    private WebView ytHomeWeb; 
+    private View dragHandle;  
     private LinearLayout rootContainer;
 
     private MediaCommandReceiver broadcastReceiver;
@@ -66,8 +66,7 @@ public class MainActivity extends Activity {
     public BinaryStreamManager streamManager;
     private SharedPreferences prefs;
 
-    // Default Height Configuration (In Pixels)
-    private int ytHeight = 500; 
+    private int ytHeight = 600; 
     private boolean isYtVisible = true;
     private boolean isZoomLocked = false;
 
@@ -88,14 +87,11 @@ public class MainActivity extends Activity {
         prefs = getSharedPreferences("YTPRO", MODE_PRIVATE);
         if (!prefs.contains("bgplay")) prefs.edit().putBoolean("bgplay", true).apply();
         
-        // Local Storage se states nikalna
         ytHeight = prefs.getInt("yt_height", 600);
         isYtVisible = prefs.getBoolean("yt_visible", true);
         isZoomLocked = prefs.getBoolean("zoom_locked", false);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        
-        // UI Container Setup
         setupDynamicLayout();
 
         if (Build.VERSION.SDK_INT >= 33) {
@@ -116,37 +112,32 @@ public class MainActivity extends Activity {
         rootContainer.setOrientation(LinearLayout.VERTICAL);
         rootContainer.setLayoutParams(new LinearLayout.LayoutParams(-1, -1));
 
-        // 1. Asli YouTube Home Web View
         ytHomeWeb = new WebView(this);
         LinearLayout.LayoutParams ytParams = new LinearLayout.LayoutParams(-1, ytHeight);
         ytHomeWeb.setLayoutParams(ytParams);
         
-        // 2. Drag Handle Divider
+        // 🛠️ PINK DIVIDER FIX: Halka Pink (#ffb6c1) Rang Daal Diya
         dragHandle = new View(this);
-        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(-1, 25); // 25px thick click area
+        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(-1, 20); 
         dragHandle.setLayoutParams(handleParams);
         GradientDrawable handleLine = new GradientDrawable();
-        handleLine.setColor(android.graphics.Color.parseColor("#444444"));
+        handleLine.setColor(android.graphics.Color.parseColor("#ffb6c1"));
         handleLine.setCornerRadius(5f);
         dragHandle.setBackground(handleLine);
 
-        // 3. Netlify Mixer Web View
         web = new YTProWebView(this);
         web.setId(R.id.web);
         LinearLayout.LayoutParams netlifyParams = new LinearLayout.LayoutParams(-1, 0, 1.0f);
         web.setLayoutParams(netlifyParams);
 
-        // Adding to layout hierarchy
         rootContainer.addView(ytHomeWeb);
         rootContainer.addView(dragHandle);
         rootContainer.addView(web);
         setContentView(rootContainer);
 
-        // Visibility Apply Karna Base States Se
         ytHomeWeb.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
         dragHandle.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
 
-        // 🛠️ DRAG SYSTEM IMPLEMENTATION (Upar-Niche Resize Script)
         dragHandle.setOnTouchListener(new View.OnTouchListener() {
             private float initialY;
             private int initialHeight;
@@ -161,8 +152,6 @@ public class MainActivity extends Activity {
                     case MotionEvent.ACTION_MOVE:
                         float deltaY = event.getRawY() - initialY;
                         int newHeight = (int) (initialHeight + deltaY);
-                        
-                        // Limits: 200px se chhota aur Screen size se bada na ho sake
                         if (newHeight > 200 && newHeight < (rootContainer.getHeight() - 300)) {
                             ytHeight = newHeight;
                             LinearLayout.LayoutParams p = (LinearLayout.LayoutParams) ytHomeWeb.getLayoutParams();
@@ -171,7 +160,6 @@ public class MainActivity extends Activity {
                         }
                         return true;
                     case MotionEvent.ACTION_UP:
-                        // Height setting local storage me save karna
                         prefs.edit().putInt("yt_height", ytHeight).apply();
                         return true;
                 }
@@ -183,20 +171,17 @@ public class MainActivity extends Activity {
     public void load(boolean dl) {
         this.dL = dl;
 
-        // --- 📺 INTERACTIVE EMOJI TOGGLE CONTROLS ---
         if (findViewById(999999) == null) {
             LinearLayout buttonBox = new LinearLayout(this);
             buttonBox.setId(999999);
             buttonBox.setOrientation(LinearLayout.HORIZONTAL);
             
-            // A. Zoom Toggle Button (Bina Background/Padding)
             final Button btnZoomToggle = new Button(this);
             btnZoomToggle.setText(isZoomLocked ? "🔓" : "🔒");
             btnZoomToggle.setBackgroundColor(android.graphics.Color.TRANSPARENT);
             btnZoomToggle.setPadding(0, 0, 0, 0);
             btnZoomToggle.setTextSize(16f);
 
-            // B. YouTube Overlay Toggle Button (Bina Background/Padding)
             final Button btnYtToggle = new Button(this);
             btnYtToggle.setText(isYtVisible ? "📺" : "🌐");
             btnYtToggle.setBackgroundColor(android.graphics.Color.TRANSPARENT);
@@ -213,17 +198,14 @@ public class MainActivity extends Activity {
             boxParams.setMargins(0, 45, 10, 0);
             addContentView(buttonBox, boxParams);
 
-            // Initial Settings Apply
             applyZoomState(isZoomLocked, btnZoomToggle);
 
-            // Zoom Listener
             btnZoomToggle.setOnClickListener(v -> {
                 isZoomLocked = !isZoomLocked;
                 applyZoomState(isZoomLocked, btnZoomToggle);
                 prefs.edit().putBoolean("zoom_locked", isZoomLocked).apply();
             });
 
-            // YouTube Toggle Listener
             btnYtToggle.setOnClickListener(v -> {
                 isYtVisible = !isYtVisible;
                 ytHomeWeb.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
@@ -233,15 +215,27 @@ public class MainActivity extends Activity {
             });
         }
 
-        // --- YT HOME WEB SETTINGS ---
+        // --- 🛠️ MOBILE MODE FIX: Desktop UserAgent Hata Diya (Ekdum Clean Mobile UI Khulega) ---
         ytHomeWeb.getSettings().setJavaScriptEnabled(true);
-        ytHomeWeb.getSettings().setUserAgentString("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
         ytHomeWeb.getSettings().setDomStorageEnabled(true);
         ytHomeWeb.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
-                // ⚡ JADOOR SCRIPT INJECTION: Har video thumbnail par Load Left/Right button chipkana
                 injectDJButtonsSystem();
+            }
+
+            // 🛠️ CONFIRMATION POPUP ON CLICK: Galti se video click hone par hijacking popup
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url.contains("watch?v=")) {
+                    Uri uri = Uri.parse(url);
+                    String videoId = uri.getQueryParameter("v");
+                    if (videoId != null) {
+                        showDeckConfirmationDialog(videoId, url);
+                        return true; // Click ko block karke apna popup dikhayenge
+                    }
+                }
+                return false;
             }
         });
         ytHomeWeb.loadUrl("https://m.youtube.com");
@@ -266,20 +260,36 @@ public class MainActivity extends Activity {
 
         web.addJavascriptInterface(new WebAppInterface(this, web), "Android");
         
-        // ⚡ NAYA WEB BRIDGE INTERFACE: YouTube web se video id Netlify me bypass karne ke liye
+        // ⚡ FIXED BRIDGE: Static query selectors badal diye hmesha correct boxes pakadne ke liye
         ytHomeWeb.addJavascriptInterface(new Object() {
             @android.webkit.JavascriptInterface
             public void sendToDeck(String deck, String videoId) {
                 runOnUiThread(() -> {
                     String fullUrl = "https://www.youtube.com/watch?v=" + videoId;
                     if ("left".equals(deck)) {
-                        // Netlify ke Left Box me text bhej kar automatic load karwana
-                        web.evaluateJavascript("var leftInput = document.querySelector('input[placeholder*=\"Paste YouTube URL\"], [placeholder*=\"left\"]'); " +
-                                "if(leftInput) { leftInput.value = '" + fullUrl + "'; leftInput.dispatchEvent(new Event('input', { bubbles: true })); }", null);
+                        web.evaluateJavascript(
+                            "(function() { " +
+                            "  var inputs = document.querySelectorAll('input'); " +
+                            "  for(var i=0; i<inputs.length; i++) { " +
+                            "    if(inputs[i].placeholder && (inputs[i].placeholder.toLowerCase().includes('left') || inputs[i].parentNode.innerText.toLowerCase().includes('left'))) { " +
+                            "      inputs[i].value = '" + fullUrl + "'; " +
+                            "      inputs[i].dispatchEvent(new Event('input', { bubbles: true })); " +
+                            "      break; " +
+                            "    } " +
+                            "  } " +
+                            "})();", null);
                     } else {
-                        // Netlify ke Right Box me text bhej kar automatic load karwana
-                        web.evaluateJavascript("var rightInput = document.querySelector('input[placeholder*=\"Paste YouTube URL\"], [placeholder*=\"right\"]'); " +
-                                "if(rightInput) { rightInput.value = '" + fullUrl + "'; rightInput.dispatchEvent(new Event('input', { bubbles: true })); }", null);
+                        web.evaluateJavascript(
+                            "(function() { " +
+                            "  var inputs = document.querySelectorAll('input'); " +
+                            "  for(var i=0; i<inputs.length; i++) { " +
+                            "    if(inputs[i].placeholder && (inputs[i].placeholder.toLowerCase().includes('right') || inputs[i].parentNode.innerText.toLowerCase().includes('right'))) { " +
+                            "      inputs[i].value = '" + fullUrl + "'; " +
+                            "      inputs[i].dispatchEvent(new Event('input', { bubbles: true })); " +
+                            "      break; " +
+                            "    } " +
+                            "  } " +
+                            "})();", null);
                     }
                 });
             }
@@ -293,13 +303,100 @@ public class MainActivity extends Activity {
         setupBackNavigation();
         streamManager = new BinaryStreamManager(web, this);
 
-        // DJ Foreground service push
         Intent serviceIntent = new Intent(this, ForegroundService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent);
         } else {
             startService(serviceIntent);
         }
+    }
+
+    // 🛠️ ASALI POPUP JADOOR: Thumbnail click hone par aane wala Pink Master Dialogue
+    private void showDeckConfirmationDialog(String videoId, String originalUrl) {
+        final Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        }
+
+        LinearLayout mainLayout = new LinearLayout(this);
+        mainLayout.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(android.graphics.Color.parseColor("#1A1A1A"));
+        bg.setCornerRadius(25f);
+        bg.setStroke(3, android.graphics.Color.parseColor("#ffb6c1")); // Matching Pink Border
+        mainLayout.setBackground(bg);
+        mainLayout.setPadding(50, 50, 50, 50);
+
+        TextView titleTv = new TextView(this);
+        titleTv.setText("🎛️ DJ LOAD CONTROLLER");
+        titleTv.setTextColor(android.graphics.Color.WHITE);
+        titleTv.setTextSize(16f);
+        titleTv.setGravity(android.view.Gravity.CENTER);
+        titleTv.setTypeface(null, android.graphics.Typeface.BOLD);
+        mainLayout.addView(titleTv);
+
+        LinearLayout btnLayout = new LinearLayout(this);
+        btnLayout.setOrientation(LinearLayout.HORIZONTAL);
+        btnLayout.setPadding(0, 30, 0, 20);
+
+        Button btnLeft = new Button(this);
+        btnLeft.setText("🎧 LEFT");
+        btnLeft.setTextColor(android.graphics.Color.BLACK);
+        GradientDrawable bL = new GradientDrawable(); bL.setColor(android.graphics.Color.parseColor("#34d399")); bL.setCornerRadius(12f);
+        btnLeft.setBackground(bL);
+
+        Button btnRight = new Button(this);
+        btnRight.setText("🎛️ RIGHT");
+        btnRight.setTextColor(android.graphics.Color.BLACK);
+        GradientDrawable bR = new GradientDrawable(); bR.setColor(android.graphics.Color.parseColor("#22d3ee")); bR.setCornerRadius(12f);
+        btnRight.setBackground(bR);
+
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1.0f);
+        p.setMargins(8, 0, 8, 0);
+        btnLayout.addView(btnLeft, p);
+        btnLayout.addView(btnRight, p);
+        mainLayout.addView(btnLayout);
+
+        Button btnWatch = new Button(this);
+        btnWatch.setText("▶️ Play inside YouTube");
+        btnWatch.setTextColor(android.graphics.Color.WHITE);
+        btnWatch.setTextSize(12f);
+        GradientDrawable bW = new GradientDrawable(); bW.setColor(android.graphics.Color.parseColor("#333333")); bW.setCornerRadius(12f);
+        btnWatch.setBackground(bW);
+        mainLayout.addView(btnWatch, new LinearLayout.LayoutParams(-1, -2));
+
+        dialog.setContentView(mainLayout);
+
+        btnLeft.setOnClickListener(v -> {
+            // Direct Bridge bypass to left input box
+            ytHomeWeb.evaluateJavascript("window.DJBridge.sendToDeck('left', '" + videoId + "');", null);
+            dialog.dismiss();
+        });
+
+        btnRight.setOnClickListener(v -> {
+            // Direct Bridge bypass to right input box
+            ytHomeWeb.evaluateJavascript("window.DJBridge.sendToDeck('right', '" + videoId + "');", null);
+            dialog.dismiss();
+        });
+
+        btnWatch.setOnClickListener(v -> {
+            dialog.dismiss();
+            ytHomeWeb.setWebViewClient(new WebViewClient()); // Temp bypass to load raw video
+            ytHomeWeb.loadUrl(originalUrl);
+            ytHomeWeb.setWebViewClient(new WebViewClient() { // Restore hijack system
+                @Override public void onPageFinished(WebView view, String url) { injectDJButtonsSystem(); }
+                @Override public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                    if (url.contains("watch?v=")) {
+                        Uri uri = Uri.parse(url); String vId = uri.getQueryParameter("v");
+                        if (vId != null) { showDeckConfirmationDialog(vId, url); return true; }
+                    }
+                    return false;
+                }
+            });
+        });
+
+        dialog.show();
     }
 
     private void applyZoomState(boolean lock, Button btn) {
@@ -316,20 +413,22 @@ public class MainActivity extends Activity {
         }
     }
 
+    // ⚡ FIXED INJECTION SCRIPT: Mobile mode ke elements ke sath sync kar diya
     private void injectDJButtonsSystem() {
-        // Yeh high-grade script har video card ko scan karke usme Left/Right trigger daal degi
         String js = "setInterval(function() { " +
                 "  var videos = document.querySelectorAll('a[href*=\"/watch?v=\"]'); " +
                 "  videos.forEach(function(v) { " +
                 "    if(v.getAttribute('dj-hooked')) return; " +
                 "    v.setAttribute('dj-hooked', 'true'); " +
-                "    var urlObj = new URL(v.href); var vId = urlObj.searchParams.get('v'); " +
-                "    if(!vId) return; " +
+                "    var hrefText = v.href; " +
+                "    if(!hrefText.contains('watch?v=')) return; " +
+                "    var parts = hrefText.split('v='); if(parts.length < 2) return; " +
+                "    var vId = parts[1].split('&')[0]; " +
                 "    var btnContainer = document.createElement('div'); " +
-                "    btnContainer.style = 'display:flex; gap:5px; padding:5px; background:#111; justify-content:center;'; " +
-                "    var bL = document.createElement('button'); bL.innerText='🎧 L'; bL.style='background:#34d399; color:#000; border:none; padding:4px 8px; font-size:11px; font-weight:bold; border-radius:4px;'; " +
+                "    btnContainer.style = 'display:flex; gap:15px; padding:8px; background:#181818; justify-content:center; width:100%; margin-top:2px; margin-bottom:5px; border-radius:6px;'; " +
+                "    var bL = document.createElement('button'); bL.innerText='🎧 Load Left'; bL.style='background:#34d399; color:#000; border:none; padding:6px 14px; font-size:12px; font-weight:bold; border-radius:6px; flex:1;'; " +
                 "    bL.onclick = function(e) { e.preventDefault(); e.stopPropagation(); window.DJBridge.sendToDeck('left', vId); }; " +
-                "    var bR = document.createElement('button'); bR.innerText='🎛️ R'; bR.style='background:#22d3ee; color:#000; border:none; padding:4px 8px; font-size:11px; font-weight:bold; border-radius:4px;'; " +
+                "    var bR = document.createElement('button'); bR.innerText='🎛️ Load Right'; bR.style='background:#22d3ee; color:#000; border:none; padding:6px 14px; font-size:12px; font-weight:bold; border-radius:6px; flex:1;'; " +
                 "    bR.onclick = function(e) { e.preventDefault(); e.stopPropagation(); window.DJBridge.sendToDeck('right', vId); }; " +
                 "    btnContainer.appendChild(bL); btnContainer.appendChild(bR); " +
                 "    v.parentNode.insertBefore(btnContainer, v.nextSibling); " +
@@ -338,61 +437,10 @@ public class MainActivity extends Activity {
         ytHomeWeb.evaluateJavascript(js, null);
     }
 
-    public void openCustomAudioPopup(final ValueCallback<Uri[]> filePathCallback) {
-        final ArrayList<AudioModel> allTracks = new ArrayList<>();
-        final ArrayList<AudioModel> displayList = new ArrayList<>();
-        Uri collection = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL) : MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
-        String[] projection = { MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME, MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DATE_ADDED };
-        try (Cursor cursor = getContentResolver().query(collection, projection, null, null, null)) {
-            if (cursor != null && cursor.moveToFirst()) {
-                int idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID);
-                int nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME);
-                int durCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION);
-                int dateCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED);
-                do {
-                    long id = cursor.getLong(idCol); String name = cursor.getString(nameCol);
-                    long duration = cursor.getLong(durCol); long date = cursor.getLong(dateCol);
-                    Uri trackUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id);
-                    if (name != null && (name.endsWith(".mp3") || name.endsWith(".wav") || name.endsWith(".m4a"))) {
-                        displayList.add(new AudioModel(name, trackUri, duration, date));
-                    }
-                } while (cursor.moveToNext());
-            }
-        } catch (Exception e) {}
-        allTracks.addAll(displayList);
-
-        final Dialog dialog = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
-        LinearLayout mainLayout = new LinearLayout(this); mainLayout.setOrientation(LinearLayout.VERTICAL);
-        mainLayout.setBackgroundColor(android.graphics.Color.parseColor("#121212")); mainLayout.setPadding(30, 40, 30, 30);
-        TextView titleTv = new TextView(this); titleTv.setText("SELECT DJ TRACK"); titleTv.setTextColor(android.graphics.Color.WHITE); titleTv.setTextSize(18f); titleTv.setGravity(android.view.Gravity.CENTER); mainLayout.addView(titleTv);
-        final EditText searchBar = new EditText(this); searchBar.setHint("Search track..."); searchBar.setHintTextColor(android.graphics.Color.GRAY); searchBar.setTextColor(android.graphics.Color.WHITE); searchBar.setPadding(20, 20, 20, 20);
-        GradientDrawable searchBg = new GradientDrawable(); searchBg.setColor(android.graphics.Color.parseColor("#222222")); searchBg.setCornerRadius(10f); searchBar.setBackground(searchBg);
-        LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(-1, -2); searchParams.setMargins(0, 30, 0, 20); mainLayout.addView(searchBar, searchParams);
-        LinearLayout filterLayout = new LinearLayout(this); filterLayout.setOrientation(LinearLayout.HORIZONTAL);
-        final Button btnAtoZ = new Button(this); btnAtoZ.setText("A to Z"); btnAtoZ.setTextSize(11f); final Button btnNewest = new Button(this); btnNewest.setText("Newest"); btnNewest.setTextSize(11f);
-        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(0, -2, 1.0f); btnParams.setMargins(5, 0, 5, 20); filterLayout.addView(btnAtoZ, btnParams); filterLayout.addView(btnNewest, btnParams); mainLayout.addView(filterLayout);
-        final ListView listView = new ListView(this); final ArrayAdapter<AudioModel> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, displayList); listView.setAdapter(adapter); mainLayout.addView(listView, new LinearLayout.LayoutParams(-1, 0, 1.0f));
-        dialog.setContentView(mainLayout); dialog.show();
-
-        searchBar.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                displayList.clear(); for (AudioModel t : allTracks) { if (t.name.toLowerCase().contains(s.toString().toLowerCase())) displayList.add(t); } adapter.notifyDataSetChanged();
-            }
-            @Override public void afterTextChanged(Editable s) {}
-        });
-        btnAtoZ.setOnClickListener(v -> { Collections.sort(displayList, (o1, o2) -> o1.name.compareToIgnoreCase(o2.name)); adapter.notifyDataSetChanged(); });
-        btnNewest.setOnClickListener(v -> { Collections.sort(displayList, (o1, o2) -> Long.compare(o2.dateAdded, o1.dateAdded)); adapter.notifyDataSetChanged(); });
-        btnNewest.performClick();
-        listView.setOnItemClickListener((parent, view, position, id) -> { filePathCallback.onReceiveValue(new Uri[]{displayList.get(position).uri}); dialog.dismiss(); });
-        dialog.setOnCancelListener(d -> filePathCallback.onReceiveValue(null));
-    }
-
     private void setupReceiver() {
         broadcastReceiver = new MediaCommandReceiver(web);
         IntentFilter filter = new IntentFilter();
         filter.addAction("LEFT_TOGGLE"); filter.addAction("RIGHT_TOGGLE"); filter.addAction("XFADER_LEFT"); filter.addAction("XFADER_RIGHT");
-        
         if (Build.VERSION.SDK_INT >= 34 && getApplicationInfo().targetSdkVersion >= 34) {
             registerReceiver(broadcastReceiver, filter, RECEIVER_EXPORTED);
         } else {
@@ -409,7 +457,6 @@ public class MainActivity extends Activity {
     }
 
     private void handleBackPress() {
-        // Pehle check karega ki splitscreen wala YouTube back ja sakta hai kya
         if (isYtVisible && ytHomeWeb.canGoBack()) {
             ytHomeWeb.goBack();
         } else if (web.canGoBack()) { 
@@ -443,12 +490,5 @@ public class MainActivity extends Activity {
     @Override public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) { web.evaluateJavascript(isInPictureInPictureMode ? "PIPlayer();" : "removePIP();", null); isPip = isInPictureInPictureMode; }
     @Override protected void onUserLeaveHint() { super.onUserLeaveHint(); if (Build.VERSION.SDK_INT >= 26 && web.getUrl() != null && web.getUrl().contains("watch") && isPlaying) { try { isPip = true; enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(new Rational(portrait ? 9 : 16, portrait ? 16 : 9)).build()); } catch (IllegalStateException e) {} } }
     @Override protected void onPause() { super.onPause(); CookieManager.getInstance().flush(); }
-    
-    @Override 
-    public void onDestroy() { 
-        super.onDestroy(); 
-        stopService(new Intent(getApplicationContext(), ForegroundService.class)); 
-        if (broadcastReceiver != null) unregisterReceiver(broadcastReceiver); 
-        if (streamManager != null) streamManager.cleanup(); 
-    }
+    @Override public void onDestroy() { super.onDestroy(); stopService(new Intent(getApplicationContext(), ForegroundService.class)); if (broadcastReceiver != null) unregisterReceiver(broadcastReceiver); if (streamManager != null) streamManager.cleanup(); }
 }
