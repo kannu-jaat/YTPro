@@ -120,7 +120,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(-1, 20); 
         dragHandle.setLayoutParams(handleParams);
         GradientDrawable handleLine = new GradientDrawable();
-        handleLine.setColor(android.graphics.Color.parseColor("#ffb6c1")); // Premium Pink
+        handleLine.setColor(android.graphics.Color.parseColor("#ffb6c1"));
         handleLine.setCornerRadius(5f);
         dragHandle.setBackground(handleLine);
 
@@ -306,6 +306,57 @@ public class MainActivity extends Activity {
         }
     }
 
+    // 🛠️ RESTORED LOCAL FILE MANAGER POPUP (Iske bina WebChromeClient error dega)
+    public void openCustomAudioPopup(final ValueCallback<Uri[]> filePathCallback) {
+        final ArrayList<AudioModel> allTracks = new ArrayList<>();
+        final ArrayList<AudioModel> displayList = new ArrayList<>();
+        Uri collection = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL) : MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+        String[] projection = { MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME, MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DATE_ADDED };
+        try (Cursor cursor = getContentResolver().query(collection, projection, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID);
+                int nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME);
+                int durCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION);
+                int dateCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED);
+                do {
+                    long id = cursor.getLong(idCol); String name = cursor.getString(nameCol);
+                    long duration = cursor.getLong(durCol); long date = cursor.getLong(dateCol);
+                    Uri trackUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id);
+                    if (name != null && (name.endsWith(".mp3") || name.endsWith(".wav") || name.endsWith(".m4a"))) {
+                        displayList.add(new AudioModel(name, trackUri, duration, date));
+                    }
+                } while (cursor.moveToNext());
+            }
+        } catch (Exception e) {}
+        allTracks.addAll(displayList);
+
+        final Dialog dialog = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        LinearLayout mainLayout = new LinearLayout(this); mainLayout.setOrientation(LinearLayout.VERTICAL);
+        mainLayout.setBackgroundColor(android.graphics.Color.parseColor("#121212")); mainLayout.setPadding(30, 40, 30, 30);
+        TextView titleTv = new TextView(this); titleTv.setText("SELECT DJ TRACK"); titleTv.setTextColor(android.graphics.Color.WHITE); titleTv.setTextSize(18f); titleTv.setGravity(android.view.Gravity.CENTER); mainLayout.addView(titleTv);
+        final EditText searchBar = new EditText(this); searchBar.setHint("Search track..."); searchBar.setHintTextColor(android.graphics.Color.GRAY); searchBar.setTextColor(android.graphics.Color.WHITE); searchBar.setPadding(20, 20, 20, 20);
+        GradientDrawable searchBg = new GradientDrawable(); searchBg.setColor(android.graphics.Color.parseColor("#222222")); searchBg.setCornerRadius(10f); searchBar.setBackground(searchBg);
+        LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(-1, -2); searchParams.setMargins(0, 30, 0, 20); mainLayout.addView(searchBar, searchParams);
+        LinearLayout filterLayout = new LinearLayout(this); filterLayout.setOrientation(LinearLayout.HORIZONTAL);
+        final Button btnAtoZ = new Button(this); btnAtoZ.setText("A to Z"); btnAtoZ.setTextSize(11f); final Button btnNewest = new Button(this); btnNewest.setText("Newest"); btnNewest.setTextSize(11f);
+        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(0, -2, 1.0f); btnParams.setMargins(5, 0, 5, 20); filterLayout.addView(btnAtoZ, btnParams); filterLayout.addView(btnNewest, btnParams); mainLayout.addView(filterLayout);
+        final ListView listView = new ListView(this); final ArrayAdapter<AudioModel> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, displayList); listView.setAdapter(adapter); mainLayout.addView(listView, new LinearLayout.LayoutParams(-1, 0, 1.0f));
+        dialog.setContentView(mainLayout); dialog.show();
+
+        searchBar.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                displayList.clear(); for (AudioModel t : allTracks) { if (t.name.toLowerCase().contains(s.toString().toLowerCase())) displayList.add(t); } adapter.notifyDataSetChanged();
+            }
+            @Override public void afterTextChanged(Editable s) {}
+        });
+        btnAtoZ.setOnClickListener(v -> { Collections.sort(displayList, (o1, o2) -> o1.name.compareToIgnoreCase(o2.name)); adapter.notifyDataSetChanged(); });
+        btnNewest.setOnClickListener(v -> { Collections.sort(displayList, (o1, o2) -> Long.compare(o2.dateAdded, o1.dateAdded)); adapter.notifyDataSetChanged(); });
+        btnNewest.performClick();
+        listView.setOnItemClickListener((parent, view, position, id) -> { filePathCallback.onReceiveValue(new Uri[]{displayList.get(position).uri}); dialog.dismiss(); });
+        dialog.setOnCancelListener(d -> filePathCallback.onReceiveValue(null));
+    }
+
     private void showDeckConfirmationDialog(String videoId, String originalUrl) {
         final Dialog dialog = new Dialog(this);
         dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
@@ -405,7 +456,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // 🛠️ FIX SYSTEM: `.contains()` ko badal kar pure JS `.includes()` kar diya hai
     private void injectDJButtonsSystem() {
         String js = "setInterval(function() { " +
                 "  var videos = document.querySelectorAll('a[href*=\"/watch?v=\"]'); " +
@@ -480,7 +530,6 @@ public class MainActivity extends Activity {
     @Override public void onBackPressed() { handleBackPress(); }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) { super.onRequestPermissionsResult(requestCode, permissions, grantResults); if (requestCode == 101) { web.loadUrl("https://kannujaat.netlify.app/"); } }
     @Override public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) { web.evaluateJavascript(isInPictureInPictureMode ? "PIPlayer();" : "removePIP();", null); isPip = isInPictureInPictureMode; }
-    @Override protected void onUserLeaveHint() { super.onUserLeaveHint(); if (Build.VERSION.SDK_INT >= 26 && web.getUrl() != null && web.getUrl().contains("watch") && isPlaying) { try { isPip = true; enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(new Rational(portrait ? 9 : 16, portrait ? 16 : 9)).build()); } catch (IllegalStateException e) {} } }
     @Override protected void onUserLeaveHint() { super.onUserLeaveHint(); if (Build.VERSION.SDK_INT >= 26 && web.getUrl() != null && web.getUrl().contains("watch") && isPlaying) { try { isPip = true; enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(new Rational(portrait ? 9 : 16, portrait ? 16 : 9)).build()); } catch (IllegalStateException e) {} } }
     @Override protected void onPause() { super.onPause(); CookieManager.getInstance().flush(); }
     @Override public void onDestroy() { super.onDestroy(); stopService(new Intent(getApplicationContext(), ForegroundService.class)); if (broadcastReceiver != null) unregisterReceiver(broadcastReceiver); if (streamManager != null) streamManager.cleanup(); }
