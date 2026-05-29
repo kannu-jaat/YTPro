@@ -59,18 +59,18 @@ public class MainActivity extends Activity {
     private YTProWebView web; 
     private YTProWebView ytHomeWeb; 
     
-    private View dragHandle;  
-    private LinearLayout rootContainer;
+    // 🛠️ NAYE VARIABLES FLOATING WINDOW KE LIYE
+    private FrameLayout rootContainer;
+    private LinearLayout ytWrapper;
+    private LinearLayout ytHeader;
 
     private MediaCommandReceiver broadcastReceiver;
     private OnBackInvokedCallback backCallback;
     public BinaryStreamManager streamManager;
     private SharedPreferences prefs;
 
-    // ⚡ NAYA HELPER: YouTube Notification ke liye
     private YTMediaSessionManager ytMediaSessionManager;
 
-    private int ytHeight = 600; 
     private boolean isYtVisible = true;
     private boolean isZoomLocked = false;
 
@@ -91,13 +91,11 @@ public class MainActivity extends Activity {
         prefs = getSharedPreferences("YTPRO", MODE_PRIVATE);
         if (!prefs.contains("bgplay")) prefs.edit().putBoolean("bgplay", true).apply();
         
-        ytHeight = prefs.getInt("yt_height", 600);
         isYtVisible = prefs.getBoolean("yt_visible", true);
         isZoomLocked = prefs.getBoolean("zoom_locked", false);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
-        // ⚡ NAYI FILE YAHAN CONNECT HUI HAI
         setupYTSessionManager();
         setupDynamicLayout();
 
@@ -114,7 +112,7 @@ public class MainActivity extends Activity {
         load(false);
     }
 
-        // 🔔 NAYA AUR SMART FUNCTION: Next aur Prev ka asli ilaaj
+    // 🔔 SMART NEXT/PREV LOGIC
     private void setupYTSessionManager() {
         ytMediaSessionManager = new YTMediaSessionManager(this, new YTMediaSessionManager.YTActionCallback() {
             @Override
@@ -128,7 +126,6 @@ public class MainActivity extends Activity {
             @Override
             public void onNext() {
                 if(ytHomeWeb != null) {
-                    // Mobile site ke 'Next' button ko dhoondhega. Agar na mile toh suggested list ke pehle video ko play kar dega.
                     String js = "var nextBtn = document.querySelector('.ytp-next-button, button[aria-label=\"Next video\"], a.ytp-next-button'); " +
                                 "if(nextBtn) { nextBtn.click(); } else { " +
                                 "  var nextVid = document.querySelector('ytm-video-with-context-renderer a, ytm-compact-video-renderer a'); " +
@@ -140,7 +137,6 @@ public class MainActivity extends Activity {
             @Override
             public void onPrev() {
                 if(ytHomeWeb != null) {
-                    // Smart Prev: 5s se zyada chala hai toh 0:00 se chalu karo, nahi toh History Back/Pichla gaana lagao.
                     String js = "var prevBtn = document.querySelector('.ytp-prev-button, button[aria-label=\"Previous video\"], a.ytp-prev-button'); " +
                                 "var v = document.querySelector('video'); " +
                                 "if(prevBtn && !prevBtn.disabled) { prevBtn.click(); } " +
@@ -156,60 +152,76 @@ public class MainActivity extends Activity {
         });
     }
 
-
+    // 🔥 FLOATING WINDOW LAYOUT SETUP
     private void setupDynamicLayout() {
-        rootContainer = new LinearLayout(this);
-        rootContainer.setOrientation(LinearLayout.VERTICAL);
-        rootContainer.setLayoutParams(new LinearLayout.LayoutParams(-1, -1));
+        rootContainer = new FrameLayout(this);
+        rootContainer.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
 
-        ytHomeWeb = new YTProWebView(this);
-        LinearLayout.LayoutParams ytParams = new LinearLayout.LayoutParams(-1, ytHeight);
-        ytHomeWeb.setLayoutParams(ytParams);
-        
-        dragHandle = new View(this);
-        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(-1, 20); 
-        dragHandle.setLayoutParams(handleParams);
-        GradientDrawable handleLine = new GradientDrawable();
-        handleLine.setColor(android.graphics.Color.parseColor("#ffb6c1")); 
-        handleLine.setCornerRadius(5f);
-        dragHandle.setBackground(handleLine);
-
+        // 1. DJ Web (Full Screen Base)
         web = new YTProWebView(this);
         web.setId(R.id.web);
-        LinearLayout.LayoutParams netlifyParams = new LinearLayout.LayoutParams(-1, 0, 1.0f);
-        web.setLayoutParams(netlifyParams);
+        rootContainer.addView(web, new FrameLayout.LayoutParams(-1, -1));
 
-        rootContainer.addView(ytHomeWeb);
-        rootContainer.addView(dragHandle);
-        rootContainer.addView(web);
+        // 2. YouTube Floating Wrapper
+        ytWrapper = new LinearLayout(this);
+        ytWrapper.setOrientation(LinearLayout.VERTICAL);
+        
+        int w = getResources().getDisplayMetrics().widthPixels;
+        int h = getResources().getDisplayMetrics().heightPixels;
+        FrameLayout.LayoutParams wrapParams = new FrameLayout.LayoutParams((int)(w * 0.90), (int)(h * 0.40)); // 90% Width, 40% Height
+        wrapParams.gravity = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL;
+        wrapParams.topMargin = 150;
+        ytWrapper.setLayoutParams(wrapParams);
+        
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(android.graphics.Color.parseColor("#121212"));
+        bg.setCornerRadius(25f);
+        bg.setStroke(4, android.graphics.Color.parseColor("#34d399")); // Neon Green Border
+        ytWrapper.setBackground(bg);
+        ytWrapper.setClipToOutline(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) ytWrapper.setElevation(30f);
+
+        // 3. Floating Drag Header
+        ytHeader = new LinearLayout(this);
+        ytHeader.setOrientation(LinearLayout.HORIZONTAL);
+        ytHeader.setBackgroundColor(android.graphics.Color.parseColor("#1e293b"));
+        ytHeader.setPadding(30, 15, 30, 15);
+        
+        TextView headerTitle = new TextView(this);
+        headerTitle.setText("🖐️ DRAG YOUTUBE");
+        headerTitle.setTextColor(android.graphics.Color.WHITE);
+        headerTitle.setTextSize(12f);
+        headerTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        headerTitle.setGravity(android.view.Gravity.CENTER);
+        ytHeader.addView(headerTitle, new LinearLayout.LayoutParams(-1, -2));
+        
+        // 4. YouTube Player inside Wrapper
+        ytHomeWeb = new YTProWebView(this);
+        ytHomeWeb.setLayoutParams(new LinearLayout.LayoutParams(-1, -1));
+
+        ytWrapper.addView(ytHeader);
+        ytWrapper.addView(ytHomeWeb);
+        rootContainer.addView(ytWrapper);
         setContentView(rootContainer);
 
-        ytHomeWeb.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
-        dragHandle.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
+        ytWrapper.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
 
-        dragHandle.setOnTouchListener(new View.OnTouchListener() {
-            private float initialY;
-            private int initialHeight;
-
+        // 🖱️ DRAG LOGIC (Smooth PC-style dragging)
+        ytHeader.setOnTouchListener(new View.OnTouchListener() {
+            float dX, dY;
             @Override
-            public boolean onTouch(View v, MotionEvent event) {
+            public boolean onTouch(View view, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
-                        initialY = event.getRawY();
-                        initialHeight = ytHomeWeb.getHeight();
+                        dX = ytWrapper.getX() - event.getRawX();
+                        dY = ytWrapper.getY() - event.getRawY();
                         return true;
                     case MotionEvent.ACTION_MOVE:
-                        float deltaY = event.getRawY() - initialY;
-                        int newHeight = (int) (initialHeight + deltaY);
-                        if (newHeight > 200 && newHeight < (rootContainer.getHeight() - 300)) {
-                            ytHeight = newHeight;
-                            LinearLayout.LayoutParams p = (LinearLayout.LayoutParams) ytHomeWeb.getLayoutParams();
-                            p.height = newHeight;
-                            ytHomeWeb.setLayoutParams(p);
-                        }
-                        return true;
-                    case MotionEvent.ACTION_UP:
-                        prefs.edit().putInt("yt_height", ytHeight).apply();
+                        ytWrapper.animate()
+                            .x(event.getRawX() + dX)
+                            .y(event.getRawY() + dY)
+                            .setDuration(0)
+                            .start();
                         return true;
                 }
                 return false;
@@ -257,8 +269,7 @@ public class MainActivity extends Activity {
 
             btnYtToggle.setOnClickListener(v -> {
                 isYtVisible = !isYtVisible;
-                ytHomeWeb.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
-                dragHandle.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
+                ytWrapper.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
                 btnYtToggle.setText(isYtVisible ? "📺" : "🌐");
                 prefs.edit().putBoolean("yt_visible", isYtVisible).apply();
             });
@@ -299,7 +310,6 @@ public class MainActivity extends Activity {
 
         web.addJavascriptInterface(new WebAppInterface(this, web), "Android");
         
-        // ⚡ BRIDGE: Ab isme 'updateYTMedia' bhi daal diya
         ytHomeWeb.addJavascriptInterface(new Object() {
             @android.webkit.JavascriptInterface
             public void sendToDeck(String deck, String videoId) {
@@ -483,7 +493,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ⚡ FULL VIP SCRIPT: Blocks clicks, Fast-Forwards Ads, Realtime IDs & Notifies Playback!
+    // 🔥 JAVASCRIPT MASTER: Duplicate Buttons Fixed (Only on Thumbnails) + Floating Ad Sniper
     private void injectDJButtonsSystem() {
         String js = "if(!window.djShieldActive) { " +
                 "  window.djShieldActive = true; " +
@@ -500,11 +510,14 @@ public class MainActivity extends Activity {
                 "}" +
                 
                 "setInterval(function() { " +
-                // 1. ADD L/R BUTTONS (Dynamic Fetching for Popular/Oldest bug)
+                // 1. ADD L/R BUTTONS (ONLY ON THUMBNAILS)
                 "  var links = document.querySelectorAll('a[href*=\"/watch?v=\"]'); " +
                 "  links.forEach(function(link) { " +
                 "    if(link.getAttribute('dj-hooked')) return; " +
                 "    link.setAttribute('dj-hooked', 'true'); " +
+                // 🛑 NEW CHECK: Agar link ke andar image tag ya yt-core-image class nahi hai, toh chhod do! (No duplicate text links)
+                "    if(!link.querySelector('img') && !link.querySelector('ytm-custom-thumbnail') && !link.querySelector('.yt-core-image')) return; " +
+                
                 "    var btnContainer = document.createElement('div'); " +
                 "    btnContainer.style = 'display:flex; gap:10px; padding:6px; background:#181818; justify-content:center; width:100%; margin-top:4px; border-radius:6px;'; " +
                 "    var bL = document.createElement('button'); bL.className='dj-btn-custom'; bL.innerText='🎧 L'; bL.style='background:#34d399; color:#000; border:none; padding:8px 12px; font-size:13px; font-weight:bold; border-radius:6px; flex:1;'; " +
@@ -530,7 +543,7 @@ public class MainActivity extends Activity {
                 "  var skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button'); " +
                 "  if(skipBtn) { skipBtn.click(); } " +
                 
-                // 3. MEDIA STATE SYNCER (For Notification 2002)
+                // 3. MEDIA STATE SYNCER
                 "  if(vid && vid.src) { " +
                 "     var isPlaying = !vid.paused; " +
                 "     var title = document.title ? document.title.replace(' - YouTube', '') : 'YouTube Audio'; " +
@@ -613,6 +626,6 @@ public class MainActivity extends Activity {
         stopService(new Intent(getApplicationContext(), ForegroundService.class)); 
         if (broadcastReceiver != null) unregisterReceiver(broadcastReceiver); 
         if (streamManager != null) streamManager.cleanup(); 
-        if (ytMediaSessionManager != null) ytMediaSessionManager.destroy(); // 🧹 Memory Leak se bachne ke liye
+        if (ytMediaSessionManager != null) ytMediaSessionManager.destroy();
     }
 }
