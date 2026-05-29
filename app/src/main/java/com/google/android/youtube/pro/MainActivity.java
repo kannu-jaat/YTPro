@@ -24,7 +24,6 @@ import android.view.View;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.ValueCallback;
-import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebChromeClient;
@@ -60,8 +59,9 @@ public class MainActivity extends Activity {
     private YTProWebView web; 
     private YTProWebView ytHomeWeb; 
     
+    // 🛠️ FLOATING WINDOW KE NAYE LAYOUTS
     private FrameLayout rootContainer;
-    private FrameLayout ytWrapper;
+    private FrameLayout ytWrapper; // Ab yeh FrameLayout hai (Resizing ke liye)
     private LinearLayout ytHeader;
 
     private MediaCommandReceiver broadcastReceiver;
@@ -72,13 +72,7 @@ public class MainActivity extends Activity {
     private YTMediaSessionManager ytMediaSessionManager;
 
     private boolean isYtVisible = true;
-    private boolean isZoomLocked = false;
-
-    // 🛠️ Window Management Variables
-    private int oldW = -1, oldH = -1;
-    private float oldX = -1f, oldY = -1f;
-    private boolean isMaximized = false;
-    private int lastHeight = 800; // Minimize/Restore state
+    private boolean isZoomLocked = true; // 🛠️ FIX: Default Desktop Mode par set kar diya hai
 
     static class AudioModel {
         String name; Uri uri; long duration; long dateAdded; String durationStr;
@@ -98,7 +92,7 @@ public class MainActivity extends Activity {
         if (!prefs.contains("bgplay")) prefs.edit().putBoolean("bgplay", true).apply();
         
         isYtVisible = prefs.getBoolean("yt_visible", true);
-        isZoomLocked = prefs.getBoolean("zoom_locked", true); // Desktop mode as default!
+        isZoomLocked = prefs.getBoolean("zoom_locked", true); // Default True (Desktop Mode)
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
@@ -118,17 +112,25 @@ public class MainActivity extends Activity {
         load(false);
     }
 
+    // 🔔 SMART NEXT/PREV LOGIC
     private void setupYTSessionManager() {
         ytMediaSessionManager = new YTMediaSessionManager(this, new YTMediaSessionManager.YTActionCallback() {
             @Override
-            public void onPlay() { if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.play();", null); }
+            public void onPlay() {
+                if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.play();", null);
+            }
             @Override
-            public void onPause() { if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.pause();", null); }
+            public void onPause() {
+                if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.pause();", null);
+            }
             @Override
             public void onNext() {
                 if(ytHomeWeb != null) {
                     String js = "var nextBtn = document.querySelector('.ytp-next-button, button[aria-label=\"Next video\"], a.ytp-next-button'); " +
-                                "if(nextBtn) { nextBtn.click(); } else { var nextVid = document.querySelector('ytm-video-with-context-renderer a, ytm-compact-video-renderer a'); if(nextVid) nextVid.click(); }";
+                                "if(nextBtn) { nextBtn.click(); } else { " +
+                                "  var nextVid = document.querySelector('ytm-video-with-context-renderer a, ytm-compact-video-renderer a'); " +
+                                "  if(nextVid) nextVid.click(); " +
+                                "}";
                     ytHomeWeb.evaluateJavascript(js, null);
                 }
             }
@@ -137,160 +139,155 @@ public class MainActivity extends Activity {
                 if(ytHomeWeb != null) {
                     String js = "var prevBtn = document.querySelector('.ytp-prev-button, button[aria-label=\"Previous video\"], a.ytp-prev-button'); " +
                                 "var v = document.querySelector('video'); " +
-                                "if(prevBtn && !prevBtn.disabled) { prevBtn.click(); } else if(v && v.currentTime > 5) { v.currentTime = 0; } else { window.history.back(); }";
+                                "if(prevBtn && !prevBtn.disabled) { prevBtn.click(); } " +
+                                "else if(v && v.currentTime > 5) { v.currentTime = 0; } " +
+                                "else { window.history.back(); }";
                     ytHomeWeb.evaluateJavascript(js, null);
                 }
             }
             @Override
-            public void onClose() { if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.pause();", null); }
+            public void onClose() {
+                if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.pause();", null);
+            }
         });
     }
 
-    // 🖥️ PC-STYLE FLOATING WINDOW SETUP
+    // 🔥 FLOATING WINDOW LAYOUT (WITH PINK RESIZE HANDLES)
     private void setupDynamicLayout() {
         rootContainer = new FrameLayout(this);
         rootContainer.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
 
-        // 1. DJ Web (Background Layer)
+        // 1. DJ Web (Full Screen Base)
         web = new YTProWebView(this);
         web.setId(R.id.web);
         rootContainer.addView(web, new FrameLayout.LayoutParams(-1, -1));
 
-        // 2. YouTube Floating Wrapper (FrameLayout so we can overlay resize handles)
+        // 2. YouTube Floating Wrapper (Ab FrameLayout ban gaya)
         ytWrapper = new FrameLayout(this);
         int w = getResources().getDisplayMetrics().widthPixels;
         int h = getResources().getDisplayMetrics().heightPixels;
-        FrameLayout.LayoutParams wrapParams = new FrameLayout.LayoutParams((int)(w * 0.90), (int)(h * 0.50)); 
+        FrameLayout.LayoutParams wrapParams = new FrameLayout.LayoutParams((int)(w * 0.90), (int)(h * 0.40));
         wrapParams.gravity = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL;
         wrapParams.topMargin = 150;
         ytWrapper.setLayoutParams(wrapParams);
         
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(android.graphics.Color.parseColor("#121212"));
-        bg.setCornerRadius(20f);
-        bg.setStroke(3, android.graphics.Color.parseColor("#34d399"));
+        bg.setCornerRadius(25f);
+        bg.setStroke(4, android.graphics.Color.parseColor("#34d399")); 
         ytWrapper.setBackground(bg);
         ytWrapper.setClipToOutline(true);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) ytWrapper.setElevation(40f);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) ytWrapper.setElevation(30f);
 
-        // Inner vertical container for header + browser
-        LinearLayout ytInner = new LinearLayout(this);
-        ytInner.setOrientation(LinearLayout.VERTICAL);
-        ytInner.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
+        // 3. Inner Vertical Container (Header + Webview)
+        LinearLayout innerVertical = new LinearLayout(this);
+        innerVertical.setOrientation(LinearLayout.VERTICAL);
 
-        // 3. Floating Drag Header with Controls
         ytHeader = new LinearLayout(this);
         ytHeader.setOrientation(LinearLayout.HORIZONTAL);
         ytHeader.setBackgroundColor(android.graphics.Color.parseColor("#1e293b"));
-        ytHeader.setPadding(20, 10, 20, 10);
-        ytHeader.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        ytHeader.setPadding(30, 15, 30, 15);
         
         TextView headerTitle = new TextView(this);
-        headerTitle.setText("🖐️ YOUTUBE");
+        headerTitle.setText("🖐️ DRAG YOUTUBE");
         headerTitle.setTextColor(android.graphics.Color.WHITE);
-        headerTitle.setTextSize(13f);
+        headerTitle.setTextSize(12f);
         headerTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
-        ytHeader.addView(headerTitle, titleParams);
-
-        // Window Controls
-        Button btnMin = new Button(this);
-        btnMin.setText("➖"); btnMin.setTextSize(12f); btnMin.setBackgroundColor(android.graphics.Color.TRANSPARENT); btnMin.setTextColor(android.graphics.Color.WHITE);
+        headerTitle.setGravity(android.view.Gravity.CENTER);
+        ytHeader.addView(headerTitle, new LinearLayout.LayoutParams(-1, -2));
         
-        Button btnMax = new Button(this);
-        btnMax.setText("⬜"); btnMax.setTextSize(12f); btnMax.setBackgroundColor(android.graphics.Color.TRANSPARENT); btnMax.setTextColor(android.graphics.Color.WHITE);
-        
-        ytHeader.addView(btnMin, new LinearLayout.LayoutParams(80, 80));
-        ytHeader.addView(btnMax, new LinearLayout.LayoutParams(80, 80));
-
-        // 4. YouTube Player
         ytHomeWeb = new YTProWebView(this);
         ytHomeWeb.setLayoutParams(new LinearLayout.LayoutParams(-1, -1));
 
-        ytInner.addView(ytHeader);
-        ytInner.addView(ytHomeWeb);
-        ytWrapper.addView(ytInner);
+        innerVertical.addView(ytHeader);
+        innerVertical.addView(ytHomeWeb);
+        ytWrapper.addView(innerVertical, new FrameLayout.LayoutParams(-1, -1));
 
-        // 5. PINK RESIZE HANDLES
-        View rightResize = new View(this);
-        rightResize.setBackgroundColor(android.graphics.Color.parseColor("#80ffb6c1")); // 50% Pink transparency
-        FrameLayout.LayoutParams rParams = new FrameLayout.LayoutParams(15, -1);
+        // 🛠️ 4. PINK RESIZE HANDLES (Right and Bottom)
+        View rightHandle = new View(this);
+        rightHandle.setBackgroundColor(android.graphics.Color.parseColor("#ff69b4")); // Pink Line
+        FrameLayout.LayoutParams rParams = new FrameLayout.LayoutParams(15, -1); // 15px width
         rParams.gravity = android.view.Gravity.RIGHT;
-        ytWrapper.addView(rightResize, rParams);
+        ytWrapper.addView(rightHandle, rParams);
 
-        View bottomResize = new View(this);
-        bottomResize.setBackgroundColor(android.graphics.Color.parseColor("#80ffb6c1")); // 50% Pink transparency
-        FrameLayout.LayoutParams bParams = new FrameLayout.LayoutParams(-1, 15);
+        View bottomHandle = new View(this);
+        bottomHandle.setBackgroundColor(android.graphics.Color.parseColor("#ff69b4")); // Pink Line
+        FrameLayout.LayoutParams bParams = new FrameLayout.LayoutParams(-1, 15); // 15px height
         bParams.gravity = android.view.Gravity.BOTTOM;
-        ytWrapper.addView(bottomResize, bParams);
+        ytWrapper.addView(bottomHandle, bParams);
+
+        View cornerHandle = new View(this); // Chhota sa box corner par pakadne ke liye
+        cornerHandle.setBackgroundColor(android.graphics.Color.parseColor("#ff69b4"));
+        FrameLayout.LayoutParams cParams = new FrameLayout.LayoutParams(40, 40);
+        cParams.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.RIGHT;
+        ytWrapper.addView(cornerHandle, cParams);
 
         rootContainer.addView(ytWrapper);
         setContentView(rootContainer);
 
         ytWrapper.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
 
-        // 🖱️ ACTIONS & LISTENERS
+        // 🖱️ DRAG LOGIC (Header se move hoga)
         ytHeader.setOnTouchListener(new View.OnTouchListener() {
             float dX, dY;
             @Override
             public boolean onTouch(View view, MotionEvent event) {
-                if (isMaximized) return false;
                 switch (event.getAction()) {
-                    case MotionEvent.ACTION_DOWN: dX = ytWrapper.getX() - event.getRawX(); dY = ytWrapper.getY() - event.getRawY(); return true;
-                    case MotionEvent.ACTION_MOVE: ytWrapper.animate().x(event.getRawX() + dX).y(event.getRawY() + dY).setDuration(0).start(); return true;
+                    case MotionEvent.ACTION_DOWN:
+                        dX = ytWrapper.getX() - event.getRawX();
+                        dY = ytWrapper.getY() - event.getRawY();
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        ytWrapper.animate().x(event.getRawX() + dX).y(event.getRawY() + dY).setDuration(0).start();
+                        return true;
                 }
                 return false;
             }
         });
 
-        rightResize.setOnTouchListener((v, e) -> {
-            if(isMaximized) return false;
-            if(e.getAction() == MotionEvent.ACTION_MOVE) {
-                int newWidth = (int) (e.getRawX() - ytWrapper.getX());
-                if (newWidth > 300) { ytWrapper.getLayoutParams().width = newWidth; ytWrapper.requestLayout(); }
+        // 📐 RESIZE LOGIC (Pink Lines se Resize hoga)
+        View.OnTouchListener resizeListener = new View.OnTouchListener() {
+            float initialX, initialY;
+            int initialWidth, initialHeight;
+            @Override
+            public boolean onTouch(View view, MotionEvent event) {
+                switch(event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        initialX = event.getRawX();
+                        initialY = event.getRawY();
+                        initialWidth = ytWrapper.getWidth();
+                        initialHeight = ytWrapper.getHeight();
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        int newWidth = initialWidth;
+                        int newHeight = initialHeight;
+                        
+                        // Right handle ya Corner handle par khincha
+                        if (view == rightHandle || view == cornerHandle) {
+                            newWidth = initialWidth + (int)(event.getRawX() - initialX);
+                        }
+                        // Bottom handle ya Corner handle par khincha
+                        if (view == bottomHandle || view == cornerHandle) {
+                            newHeight = initialHeight + (int)(event.getRawY() - initialY);
+                        }
+                        
+                        // Bahut zyada chota hone se bachane ke liye limit
+                        if(newWidth < 400) newWidth = 400;
+                        if(newHeight < 300) newHeight = 300;
+                        
+                        FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) ytWrapper.getLayoutParams();
+                        p.width = newWidth;
+                        p.height = newHeight;
+                        ytWrapper.setLayoutParams(p);
+                        return true;
+                }
+                return false;
             }
-            return true;
-        });
+        };
 
-        bottomResize.setOnTouchListener((v, e) -> {
-            if(isMaximized) return false;
-            if(e.getAction() == MotionEvent.ACTION_MOVE) {
-                int newHeight = (int) (e.getRawY() - ytWrapper.getY());
-                if (newHeight > 200) { ytWrapper.getLayoutParams().height = newHeight; ytWrapper.requestLayout(); }
-            }
-            return true;
-        });
-
-        btnMin.setOnClickListener(v -> {
-            if (ytHomeWeb.getVisibility() == View.VISIBLE) {
-                ytHomeWeb.setVisibility(View.GONE);
-                lastHeight = ytWrapper.getLayoutParams().height; 
-                ytWrapper.getLayoutParams().height = FrameLayout.LayoutParams.WRAP_CONTENT;
-                btnMin.setText("➕");
-            } else {
-                ytHomeWeb.setVisibility(View.VISIBLE);
-                ytWrapper.getLayoutParams().height = lastHeight;
-                btnMin.setText("➖");
-            }
-            ytWrapper.requestLayout();
-        });
-
-        btnMax.setOnClickListener(v -> {
-            if (!isMaximized) {
-                oldX = ytWrapper.getX(); oldY = ytWrapper.getY();
-                oldW = ytWrapper.getLayoutParams().width; oldH = ytWrapper.getLayoutParams().height;
-                ytWrapper.setX(0); ytWrapper.setY(0);
-                ytWrapper.getLayoutParams().width = FrameLayout.LayoutParams.MATCH_PARENT;
-                ytWrapper.getLayoutParams().height = FrameLayout.LayoutParams.MATCH_PARENT;
-                isMaximized = true;
-            } else {
-                ytWrapper.setX(oldX); ytWrapper.setY(oldY);
-                ytWrapper.getLayoutParams().width = oldW;
-                ytWrapper.getLayoutParams().height = oldH;
-                isMaximized = false;
-            }
-            ytWrapper.requestLayout();
-        });
+        rightHandle.setOnTouchListener(resizeListener);
+        bottomHandle.setOnTouchListener(resizeListener);
+        cornerHandle.setOnTouchListener(resizeListener);
     }
 
     public void load(boolean dl) {
@@ -323,6 +320,8 @@ public class MainActivity extends Activity {
             boxParams.setMargins(0, 45, 10, 0);
             addContentView(buttonBox, boxParams);
 
+            applyZoomState(isZoomLocked, btnZoomToggle);
+
             btnZoomToggle.setOnClickListener(v -> {
                 isZoomLocked = !isZoomLocked;
                 applyZoomState(isZoomLocked, btnZoomToggle);
@@ -352,19 +351,15 @@ public class MainActivity extends Activity {
         ytHomeWeb.setWebChromeClient(new YTProWebChromeClient(this, ytHomeWeb));
         ytHomeWeb.loadUrl("https://m.youtube.com");
 
-        // 🚀 FIRST BOOT CACHE & DESKTOP UA FIX
         web.getSettings().setJavaScriptEnabled(true);
-        web.getSettings().setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+        web.getSettings().setUserAgentString("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
         web.getSettings().setUseWideViewPort(true);
         web.getSettings().setLoadWithOverviewMode(true);
         web.getSettings().setAllowFileAccess(true);
         web.getSettings().setAllowContentAccess(true);
         web.getSettings().setDomStorageEnabled(true);
         web.getSettings().setDatabaseEnabled(true);
-        web.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            web.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        }
+        web.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_DEFAULT);
         web.getSettings().setMediaPlaybackRequiresUserGesture(false); 
         web.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
@@ -404,14 +399,21 @@ public class MainActivity extends Activity {
         }, "DJBridge");
 
         web.setWebChromeClient(new YTProWebChromeClient(this, web));
+        
+        // 🛠️ FIX: AUTO-RETRY PLAYER LOAD HACK (Empty Decks ka Ilaaj)
         web.setWebViewClient(new YTProWebViewClient(this, web) {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // Page load hote hi seedha Desktop state apply! (Bug Fix)
-                applyZoomState(isZoomLocked, null);
+                web.evaluateJavascript(
+                    "setTimeout(function() { " +
+                    "  if (typeof players === 'undefined' || !players.left || typeof players.left.getPlayerState !== 'function') { " +
+                    "      window.location.reload(); " + // Agar players nahi bane toh background me page turant wapas reload kar dega
+                    "  } " +
+                    "}, 2500);", null);
             }
         });
+        
         web.loadUrl("https://kannujaat.netlify.app/");
 
         setupReceiver();
@@ -479,7 +481,9 @@ public class MainActivity extends Activity {
     private void showDeckConfirmationDialog(String videoId, String originalUrl) {
         final Dialog dialog = new Dialog(this);
         dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
-        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        }
 
         LinearLayout mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
@@ -503,31 +507,50 @@ public class MainActivity extends Activity {
         btnLayout.setPadding(0, 30, 0, 20);
 
         Button btnLeft = new Button(this);
-        btnLeft.setText("🎧 L"); btnLeft.setTextColor(android.graphics.Color.BLACK); btnLeft.setTextSize(14f);
+        btnLeft.setText("🎧 L"); 
+        btnLeft.setTextColor(android.graphics.Color.BLACK);
+        btnLeft.setTextSize(14f);
         GradientDrawable bL = new GradientDrawable(); bL.setColor(android.graphics.Color.parseColor("#34d399")); bL.setCornerRadius(12f);
         btnLeft.setBackground(bL);
 
         Button btnRight = new Button(this);
-        btnRight.setText("🎛️ R"); btnRight.setTextColor(android.graphics.Color.BLACK); btnRight.setTextSize(14f);
+        btnRight.setText("🎛️ R"); 
+        btnRight.setTextColor(android.graphics.Color.BLACK);
+        btnRight.setTextSize(14f);
         GradientDrawable bR = new GradientDrawable(); bR.setColor(android.graphics.Color.parseColor("#22d3ee")); bR.setCornerRadius(12f);
         btnRight.setBackground(bR);
 
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1.0f);
         p.setMargins(8, 0, 8, 0);
-        btnLayout.addView(btnLeft, p); btnLayout.addView(btnRight, p);
+        btnLayout.addView(btnLeft, p);
+        btnLayout.addView(btnRight, p);
         mainLayout.addView(btnLayout);
 
         Button btnWatch = new Button(this);
-        btnWatch.setText("▶️ Play on YouTube"); btnWatch.setTextColor(android.graphics.Color.WHITE); btnWatch.setTextSize(14f);
+        btnWatch.setText("▶️ Play on YouTube");
+        btnWatch.setTextColor(android.graphics.Color.WHITE);
+        btnWatch.setTextSize(14f);
         GradientDrawable bW = new GradientDrawable(); bW.setColor(android.graphics.Color.parseColor("#333333")); bW.setCornerRadius(12f);
         btnWatch.setBackground(bW);
         mainLayout.addView(btnWatch, new LinearLayout.LayoutParams(-1, -2));
 
         dialog.setContentView(mainLayout);
 
-        btnLeft.setOnClickListener(v -> { ytHomeWeb.evaluateJavascript("window.DJBridge.sendToDeck('left', '" + videoId + "');", null); dialog.dismiss(); });
-        btnRight.setOnClickListener(v -> { ytHomeWeb.evaluateJavascript("window.DJBridge.sendToDeck('right', '" + videoId + "');", null); dialog.dismiss(); });
-        btnWatch.setOnClickListener(v -> { dialog.dismiss(); ytHomeWeb.loadUrl(originalUrl); });
+        btnLeft.setOnClickListener(v -> {
+            ytHomeWeb.evaluateJavascript("window.DJBridge.sendToDeck('left', '" + videoId + "');", null);
+            dialog.dismiss();
+        });
+
+        btnRight.setOnClickListener(v -> {
+            ytHomeWeb.evaluateJavascript("window.DJBridge.sendToDeck('right', '" + videoId + "');", null);
+            dialog.dismiss();
+        });
+
+        btnWatch.setOnClickListener(v -> {
+            dialog.dismiss();
+            ytHomeWeb.loadUrl(originalUrl); 
+        });
+
         dialog.show();
     }
 
@@ -536,16 +559,16 @@ public class MainActivity extends Activity {
             web.getSettings().setSupportZoom(false);
             web.getSettings().setBuiltInZoomControls(false);
             web.evaluateJavascript("var meta = document.querySelector('meta[name=viewport]'); if(!meta){ meta = document.createElement('meta'); meta.name='viewport'; document.head.appendChild(meta); } meta.setAttribute('content', 'width=1024, user-scalable=no');", null);
-            if(btn != null) btn.setText("🔓");
+            btn.setText("🔓");
         } else {
             web.getSettings().setSupportZoom(true);
             web.getSettings().setBuiltInZoomControls(true);
             web.evaluateJavascript("var meta = document.querySelector('meta[name=viewport]'); if(meta){ meta.setAttribute('content', 'width=1024, user-scalable=yes'); }", null);
-            if(btn != null) btn.setText("🔒");
+            btn.setText("🔒");
         }
     }
 
-    // 🎨 OVERLAY THUMBNAIL BUTTONS FIX
+    // 🛠️ FIX: BUTTON OVERLAY 50% TRANSPARENT ON THUMBNAIL BOTTOM
     private void injectDJButtonsSystem() {
         String js = "if(!window.djShieldActive) { " +
                 "  window.djShieldActive = true; " +
@@ -553,7 +576,11 @@ public class MainActivity extends Activity {
                 "    var customBtn = e.target.closest('.dj-btn-custom'); " +
                 "    if(customBtn) return; " + 
                 "    var link = e.target.closest('a[href*=\"/watch?v=\"]'); " +
-                "    if(link) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); var match = link.href.match(/[?&]v=([^&]+)/); if(match) { window.DJBridge.showPopup(match[1], link.href); } } " +
+                "    if(link) { " +
+                "      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); " +
+                "      var match = link.href.match(/[?&]v=([^&]+)/); " +
+                "      if(match) { window.DJBridge.showPopup(match[1], link.href); } " +
+                "    } " +
                 "  }, true); " +
                 "}" +
                 
@@ -562,24 +589,29 @@ public class MainActivity extends Activity {
                 "  links.forEach(function(link) { " +
                 "    if(link.getAttribute('dj-hooked')) return; " +
                 "    link.setAttribute('dj-hooked', 'true'); " +
-                
                 "    if(!link.querySelector('img') && !link.querySelector('ytm-custom-thumbnail') && !link.querySelector('.yt-core-image')) return; " +
                 
-                // 🛠️ MAGIC FIX: Button Container absolute overlay on thumbnail with 50% transparency!
+                // Overlay Design (Transparent at bottom)
                 "    link.style.position = 'relative'; " +
-                "    link.style.display = 'block'; " +
-                
                 "    var btnContainer = document.createElement('div'); " +
-                "    btnContainer.style = 'position:absolute; bottom:0; left:0; right:0; display:flex; gap:5px; padding:4px; background:rgba(0,0,0,0.5); z-index:99; justify-content:space-between; box-sizing:border-box;'; " +
+                "    btnContainer.style = 'position:absolute; bottom:0px; left:0px; right:0px; display:flex; gap:4px; padding:4px; background:rgba(0,0,0,0.5); justify-content:center; z-index:99;'; " +
                 
-                "    var bL = document.createElement('button'); bL.className='dj-btn-custom'; bL.innerText='L ⬅️'; bL.style='background:rgba(52,211,153,0.5); color:#fff; border:none; padding:4px; font-size:11px; font-weight:bold; border-radius:4px; flex:1; backdrop-filter:blur(2px);'; " +
-                "    bL.onclick = function(e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); var m = link.href.match(/[?&]v=([^&]+)/); if(m) window.DJBridge.sendToDeck('left', m[1]); }; " +
+                "    var bL = document.createElement('button'); bL.className='dj-btn-custom'; bL.innerText='🎧 L'; bL.style='background:rgba(52, 211, 153, 0.9); color:#000; border:none; padding:4px 8px; font-size:12px; font-weight:bold; border-radius:4px; flex:1;'; " +
+                "    bL.onclick = function(e) { " +
+                "       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); " +
+                "       var m = link.href.match(/[?&]v=([^&]+)/); " +
+                "       if(m) window.DJBridge.sendToDeck('left', m[1]); " +
+                "    }; " +
                 
-                "    var bR = document.createElement('button'); bR.className='dj-btn-custom'; bR.innerText='R ➡️'; bR.style='background:rgba(34,211,238,0.5); color:#fff; border:none; padding:4px; font-size:11px; font-weight:bold; border-radius:4px; flex:1; backdrop-filter:blur(2px);'; " +
-                "    bR.onclick = function(e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); var m = link.href.match(/[?&]v=([^&]+)/); if(m) window.DJBridge.sendToDeck('right', m[1]); }; " +
+                "    var bR = document.createElement('button'); bR.className='dj-btn-custom'; bR.innerText='🎛️ R'; bR.style='background:rgba(34, 211, 238, 0.9); color:#000; border:none; padding:4px 8px; font-size:12px; font-weight:bold; border-radius:4px; flex:1;'; " +
+                "    bR.onclick = function(e) { " +
+                "       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); " +
+                "       var m = link.href.match(/[?&]v=([^&]+)/); " +
+                "       if(m) window.DJBridge.sendToDeck('right', m[1]); " +
+                "    }; " +
                 
                 "    btnContainer.appendChild(bL); btnContainer.appendChild(bR); " +
-                "    link.appendChild(btnContainer); " + 
+                "    link.appendChild(btnContainer); " +
                 "  }); " +
                 
                 "  var adBox = document.querySelector('.ad-showing, .ad-interrupting'); " +
@@ -591,7 +623,11 @@ public class MainActivity extends Activity {
                 "  if(vid && vid.src) { " +
                 "     var isPlaying = !vid.paused; " +
                 "     var title = document.title ? document.title.replace(' - YouTube', '') : 'YouTube Audio'; " +
-                "     if (window.lastYTState !== isPlaying || window.lastYTTitle !== title) { window.lastYTState = isPlaying; window.lastYTTitle = title; window.DJBridge.updateYTMedia(isPlaying, title, 'YouTube Player'); } " +
+                "     if (window.lastYTState !== isPlaying || window.lastYTTitle !== title) { " +
+                "         window.lastYTState = isPlaying; " +
+                "         window.lastYTTitle = title; " +
+                "         window.DJBridge.updateYTMedia(isPlaying, title, 'YouTube Player'); " +
+                "     } " +
                 "  } " +
                 "}, 1000);";
         ytHomeWeb.evaluateJavascript(js, null);
@@ -601,18 +637,29 @@ public class MainActivity extends Activity {
         broadcastReceiver = new MediaCommandReceiver(web);
         IntentFilter filter = new IntentFilter();
         filter.addAction("LEFT_TOGGLE"); filter.addAction("RIGHT_TOGGLE"); filter.addAction("XFADER_LEFT"); filter.addAction("XFADER_RIGHT");
-        if (Build.VERSION.SDK_INT >= 34 && getApplicationInfo().targetSdkVersion >= 34) { registerReceiver(broadcastReceiver, filter, RECEIVER_EXPORTED); } 
-        else { registerReceiver(broadcastReceiver, filter); }
+        if (Build.VERSION.SDK_INT >= 34 && getApplicationInfo().targetSdkVersion >= 34) {
+            registerReceiver(broadcastReceiver, filter, RECEIVER_EXPORTED);
+        } else {
+            registerReceiver(broadcastReceiver, filter);
+        }
     }
 
     private void setupBackNavigation() {
-        if (Build.VERSION.SDK_INT >= 33) { getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, new OnBackInvokedCallback() { @Override public void onBackInvoked() { handleBackPress(); } }); }
+        if (Build.VERSION.SDK_INT >= 33) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, new OnBackInvokedCallback() {
+                @Override public void onBackInvoked() { handleBackPress(); }
+            });
+        }
     }
 
     private void handleBackPress() {
-        if (isYtVisible && ytHomeWeb.canGoBack()) { ytHomeWeb.goBack(); } 
-        else if (web.canGoBack()) { web.goBack(); } 
-        else { showExitDialog(); }
+        if (isYtVisible && ytHomeWeb.canGoBack()) {
+            ytHomeWeb.goBack();
+        } else if (web.canGoBack()) { 
+            web.goBack(); 
+        } else { 
+            showExitDialog(); 
+        }
     }
 
     private void showExitDialog() {
@@ -646,9 +693,11 @@ public class MainActivity extends Activity {
         } 
     }
     
-    @Override protected void onPause() { super.onPause(); CookieManager.getInstance().flush(); }
+    @Override 
+    protected void onPause() { super.onPause(); CookieManager.getInstance().flush(); }
     
-    @Override public void onDestroy() { 
+    @Override 
+    public void onDestroy() { 
         super.onDestroy(); 
         stopService(new Intent(getApplicationContext(), ForegroundService.class)); 
         if (broadcastReceiver != null) unregisterReceiver(broadcastReceiver); 
