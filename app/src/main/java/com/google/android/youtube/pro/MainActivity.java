@@ -59,9 +59,8 @@ public class MainActivity extends Activity {
     private YTProWebView web; 
     private YTProWebView ytHomeWeb; 
     
-    // 🛠️ FLOATING WINDOW KE NAYE LAYOUTS
     private FrameLayout rootContainer;
-    private FrameLayout ytWrapper; // Ab yeh FrameLayout hai (Resizing ke liye)
+    private FrameLayout ytWrapper;
     private LinearLayout ytHeader;
 
     private MediaCommandReceiver broadcastReceiver;
@@ -72,7 +71,12 @@ public class MainActivity extends Activity {
     private YTMediaSessionManager ytMediaSessionManager;
 
     private boolean isYtVisible = true;
-    private boolean isZoomLocked = true; // 🛠️ FIX: Default Desktop Mode par set kar diya hai
+    private boolean isZoomLocked = true; 
+
+    // 💾 MEMORY & FULLSCREEN VARIABLES
+    private boolean isFullscreen = false;
+    private int preFullW, preFullH;
+    private float preFullX, preFullY;
 
     static class AudioModel {
         String name; Uri uri; long duration; long dateAdded; String durationStr;
@@ -92,7 +96,7 @@ public class MainActivity extends Activity {
         if (!prefs.contains("bgplay")) prefs.edit().putBoolean("bgplay", true).apply();
         
         isYtVisible = prefs.getBoolean("yt_visible", true);
-        isZoomLocked = prefs.getBoolean("zoom_locked", true); // Default True (Desktop Mode)
+        isZoomLocked = prefs.getBoolean("zoom_locked", true); 
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
@@ -112,63 +116,56 @@ public class MainActivity extends Activity {
         load(false);
     }
 
-    // 🔔 SMART NEXT/PREV LOGIC
     private void setupYTSessionManager() {
         ytMediaSessionManager = new YTMediaSessionManager(this, new YTMediaSessionManager.YTActionCallback() {
-            @Override
-            public void onPlay() {
-                if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.play();", null);
-            }
-            @Override
-            public void onPause() {
-                if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.pause();", null);
-            }
-            @Override
-            public void onNext() {
+            @Override public void onPlay() { if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.play();", null); }
+            @Override public void onPause() { if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.pause();", null); }
+            @Override public void onNext() {
                 if(ytHomeWeb != null) {
                     String js = "var nextBtn = document.querySelector('.ytp-next-button, button[aria-label=\"Next video\"], a.ytp-next-button'); " +
-                                "if(nextBtn) { nextBtn.click(); } else { " +
-                                "  var nextVid = document.querySelector('ytm-video-with-context-renderer a, ytm-compact-video-renderer a'); " +
-                                "  if(nextVid) nextVid.click(); " +
-                                "}";
+                                "if(nextBtn) { nextBtn.click(); } else { var nextVid = document.querySelector('ytm-video-with-context-renderer a, ytm-compact-video-renderer a'); if(nextVid) nextVid.click(); }";
                     ytHomeWeb.evaluateJavascript(js, null);
                 }
             }
-            @Override
-            public void onPrev() {
+            @Override public void onPrev() {
                 if(ytHomeWeb != null) {
-                    String js = "var prevBtn = document.querySelector('.ytp-prev-button, button[aria-label=\"Previous video\"], a.ytp-prev-button'); " +
-                                "var v = document.querySelector('video'); " +
-                                "if(prevBtn && !prevBtn.disabled) { prevBtn.click(); } " +
-                                "else if(v && v.currentTime > 5) { v.currentTime = 0; } " +
-                                "else { window.history.back(); }";
+                    String js = "var prevBtn = document.querySelector('.ytp-prev-button, button[aria-label=\"Previous video\"], a.ytp-prev-button'); var v = document.querySelector('video'); " +
+                                "if(prevBtn && !prevBtn.disabled) { prevBtn.click(); } else if(v && v.currentTime > 5) { v.currentTime = 0; } else { window.history.back(); }";
                     ytHomeWeb.evaluateJavascript(js, null);
                 }
             }
-            @Override
-            public void onClose() {
-                if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.pause();", null);
-            }
+            @Override public void onClose() { if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("var v = document.querySelector('video'); if(v) v.pause();", null); }
         });
     }
 
-    // 🔥 FLOATING WINDOW LAYOUT (WITH PINK RESIZE HANDLES)
+    // 🔥 DYNAMIC LAYOUT WITH MEMORY, FULLSCREEN & REFRESH
     private void setupDynamicLayout() {
         rootContainer = new FrameLayout(this);
         rootContainer.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
 
-        // 1. DJ Web (Full Screen Base)
         web = new YTProWebView(this);
         web.setId(R.id.web);
         rootContainer.addView(web, new FrameLayout.LayoutParams(-1, -1));
 
-        // 2. YouTube Floating Wrapper (Ab FrameLayout ban gaya)
         ytWrapper = new FrameLayout(this);
+        
+        // 💾 FETCH MEMORY STATE
         int w = getResources().getDisplayMetrics().widthPixels;
         int h = getResources().getDisplayMetrics().heightPixels;
-        FrameLayout.LayoutParams wrapParams = new FrameLayout.LayoutParams((int)(w * 0.90), (int)(h * 0.40));
-        wrapParams.gravity = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL;
-        wrapParams.topMargin = 150;
+        int savedW = prefs.getInt("yt_w", (int)(w * 0.90));
+        int savedH = prefs.getInt("yt_h", (int)(h * 0.40));
+        float savedX = prefs.getFloat("yt_x", -1f);
+        float savedY = prefs.getFloat("yt_y", -1f);
+
+        FrameLayout.LayoutParams wrapParams = new FrameLayout.LayoutParams(savedW, savedH);
+        if (savedX != -1f && savedY != -1f) {
+            wrapParams.leftMargin = (int) savedX;
+            wrapParams.topMargin = (int) savedY;
+            wrapParams.gravity = android.view.Gravity.TOP | android.view.Gravity.LEFT;
+        } else {
+            wrapParams.gravity = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL;
+            wrapParams.topMargin = 150;
+        }
         ytWrapper.setLayoutParams(wrapParams);
         
         GradientDrawable bg = new GradientDrawable();
@@ -179,23 +176,42 @@ public class MainActivity extends Activity {
         ytWrapper.setClipToOutline(true);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) ytWrapper.setElevation(30f);
 
-        // 3. Inner Vertical Container (Header + Webview)
         LinearLayout innerVertical = new LinearLayout(this);
         innerVertical.setOrientation(LinearLayout.VERTICAL);
 
         ytHeader = new LinearLayout(this);
         ytHeader.setOrientation(LinearLayout.HORIZONTAL);
         ytHeader.setBackgroundColor(android.graphics.Color.parseColor("#1e293b"));
-        ytHeader.setPadding(30, 15, 30, 15);
+        ytHeader.setPadding(30, 10, 20, 10);
+        ytHeader.setGravity(android.view.Gravity.CENTER_VERTICAL);
         
         TextView headerTitle = new TextView(this);
         headerTitle.setText("🖐️ DRAG YOUTUBE");
         headerTitle.setTextColor(android.graphics.Color.WHITE);
         headerTitle.setTextSize(12f);
         headerTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        headerTitle.setGravity(android.view.Gravity.CENTER);
-        ytHeader.addView(headerTitle, new LinearLayout.LayoutParams(-1, -2));
-        
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
+        ytHeader.addView(headerTitle, titleParams);
+
+        // 🔄 REFRESH BUTTON
+        Button btnRefresh = new Button(this);
+        btnRefresh.setText("🔄");
+        btnRefresh.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        btnRefresh.setTextColor(android.graphics.Color.WHITE);
+        btnRefresh.setPadding(0, 0, 0, 0);
+        btnRefresh.setOnClickListener(v -> {
+            if(ytHomeWeb != null) ytHomeWeb.reload();
+        });
+        ytHeader.addView(btnRefresh, new LinearLayout.LayoutParams(100, -1));
+
+        // 🔲 FULLSCREEN BUTTON
+        Button btnFullscreen = new Button(this);
+        btnFullscreen.setText("🔲");
+        btnFullscreen.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        btnFullscreen.setTextColor(android.graphics.Color.WHITE);
+        btnFullscreen.setPadding(0, 0, 0, 0);
+        ytHeader.addView(btnFullscreen, new LinearLayout.LayoutParams(100, -1));
+
         ytHomeWeb = new YTProWebView(this);
         ytHomeWeb.setLayoutParams(new LinearLayout.LayoutParams(-1, -1));
 
@@ -203,20 +219,20 @@ public class MainActivity extends Activity {
         innerVertical.addView(ytHomeWeb);
         ytWrapper.addView(innerVertical, new FrameLayout.LayoutParams(-1, -1));
 
-        // 🛠️ 4. PINK RESIZE HANDLES (Right and Bottom)
+        // 🛠️ PINK RESIZE HANDLES
         View rightHandle = new View(this);
-        rightHandle.setBackgroundColor(android.graphics.Color.parseColor("#ff69b4")); // Pink Line
-        FrameLayout.LayoutParams rParams = new FrameLayout.LayoutParams(15, -1); // 15px width
+        rightHandle.setBackgroundColor(android.graphics.Color.parseColor("#ff69b4")); 
+        FrameLayout.LayoutParams rParams = new FrameLayout.LayoutParams(15, -1); 
         rParams.gravity = android.view.Gravity.RIGHT;
         ytWrapper.addView(rightHandle, rParams);
 
         View bottomHandle = new View(this);
-        bottomHandle.setBackgroundColor(android.graphics.Color.parseColor("#ff69b4")); // Pink Line
-        FrameLayout.LayoutParams bParams = new FrameLayout.LayoutParams(-1, 15); // 15px height
+        bottomHandle.setBackgroundColor(android.graphics.Color.parseColor("#ff69b4")); 
+        FrameLayout.LayoutParams bParams = new FrameLayout.LayoutParams(-1, 15); 
         bParams.gravity = android.view.Gravity.BOTTOM;
         ytWrapper.addView(bottomHandle, bParams);
 
-        View cornerHandle = new View(this); // Chhota sa box corner par pakadne ke liye
+        View cornerHandle = new View(this); 
         cornerHandle.setBackgroundColor(android.graphics.Color.parseColor("#ff69b4"));
         FrameLayout.LayoutParams cParams = new FrameLayout.LayoutParams(40, 40);
         cParams.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.RIGHT;
@@ -227,11 +243,49 @@ public class MainActivity extends Activity {
 
         ytWrapper.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
 
-        // 🖱️ DRAG LOGIC (Header se move hoga)
+        // 🔲 FULLSCREEN LOGIC
+        btnFullscreen.setOnClickListener(v -> {
+            if (!isFullscreen) {
+                // Save current state before going fullscreen
+                preFullW = ytWrapper.getWidth();
+                preFullH = ytWrapper.getHeight();
+                preFullX = ytWrapper.getX();
+                preFullY = ytWrapper.getY();
+                
+                FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) ytWrapper.getLayoutParams();
+                p.width = FrameLayout.LayoutParams.MATCH_PARENT;
+                p.height = FrameLayout.LayoutParams.MATCH_PARENT;
+                p.leftMargin = 0; p.topMargin = 0;
+                ytWrapper.setLayoutParams(p);
+                ytWrapper.setX(0); ytWrapper.setY(0);
+                
+                btnFullscreen.setText("🔽");
+                rightHandle.setVisibility(View.GONE);
+                bottomHandle.setVisibility(View.GONE);
+                cornerHandle.setVisibility(View.GONE);
+                isFullscreen = true;
+            } else {
+                // Restore previous state
+                FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) ytWrapper.getLayoutParams();
+                p.width = preFullW;
+                p.height = preFullH;
+                ytWrapper.setLayoutParams(p);
+                ytWrapper.setX(preFullX); ytWrapper.setY(preFullY);
+                
+                btnFullscreen.setText("🔲");
+                rightHandle.setVisibility(View.VISIBLE);
+                bottomHandle.setVisibility(View.VISIBLE);
+                cornerHandle.setVisibility(View.VISIBLE);
+                isFullscreen = false;
+            }
+        });
+
+        // 🖱️ DRAG LOGIC (With Save Memory)
         ytHeader.setOnTouchListener(new View.OnTouchListener() {
             float dX, dY;
             @Override
             public boolean onTouch(View view, MotionEvent event) {
+                if(isFullscreen) return false; // Prevent drag in fullscreen
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
                         dX = ytWrapper.getX() - event.getRawX();
@@ -240,12 +294,15 @@ public class MainActivity extends Activity {
                     case MotionEvent.ACTION_MOVE:
                         ytWrapper.animate().x(event.getRawX() + dX).y(event.getRawY() + dY).setDuration(0).start();
                         return true;
+                    case MotionEvent.ACTION_UP:
+                        prefs.edit().putFloat("yt_x", ytWrapper.getX()).putFloat("yt_y", ytWrapper.getY()).apply();
+                        return true;
                 }
                 return false;
             }
         });
 
-        // 📐 RESIZE LOGIC (Pink Lines se Resize hoga)
+        // 📐 RESIZE LOGIC (With Save Memory)
         View.OnTouchListener resizeListener = new View.OnTouchListener() {
             float initialX, initialY;
             int initialWidth, initialHeight;
@@ -262,16 +319,9 @@ public class MainActivity extends Activity {
                         int newWidth = initialWidth;
                         int newHeight = initialHeight;
                         
-                        // Right handle ya Corner handle par khincha
-                        if (view == rightHandle || view == cornerHandle) {
-                            newWidth = initialWidth + (int)(event.getRawX() - initialX);
-                        }
-                        // Bottom handle ya Corner handle par khincha
-                        if (view == bottomHandle || view == cornerHandle) {
-                            newHeight = initialHeight + (int)(event.getRawY() - initialY);
-                        }
+                        if (view == rightHandle || view == cornerHandle) newWidth = initialWidth + (int)(event.getRawX() - initialX);
+                        if (view == bottomHandle || view == cornerHandle) newHeight = initialHeight + (int)(event.getRawY() - initialY);
                         
-                        // Bahut zyada chota hone se bachane ke liye limit
                         if(newWidth < 400) newWidth = 400;
                         if(newHeight < 300) newHeight = 300;
                         
@@ -279,6 +329,9 @@ public class MainActivity extends Activity {
                         p.width = newWidth;
                         p.height = newHeight;
                         ytWrapper.setLayoutParams(p);
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                        prefs.edit().putInt("yt_w", ytWrapper.getWidth()).putInt("yt_h", ytWrapper.getHeight()).apply();
                         return true;
                 }
                 return false;
@@ -399,8 +452,6 @@ public class MainActivity extends Activity {
         }, "DJBridge");
 
         web.setWebChromeClient(new YTProWebChromeClient(this, web));
-        
-        // 🛠️ FIX: AUTO-RETRY PLAYER LOAD HACK (Empty Decks ka Ilaaj)
         web.setWebViewClient(new YTProWebViewClient(this, web) {
             @Override
             public void onPageFinished(WebView view, String url) {
@@ -408,12 +459,11 @@ public class MainActivity extends Activity {
                 web.evaluateJavascript(
                     "setTimeout(function() { " +
                     "  if (typeof players === 'undefined' || !players.left || typeof players.left.getPlayerState !== 'function') { " +
-                    "      window.location.reload(); " + // Agar players nahi bane toh background me page turant wapas reload kar dega
+                    "      window.location.reload(); " +
                     "  } " +
                     "}, 2500);", null);
             }
         });
-        
         web.loadUrl("https://kannujaat.netlify.app/");
 
         setupReceiver();
@@ -568,7 +618,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // 🛠️ FIX: BUTTON OVERLAY 50% TRANSPARENT ON THUMBNAIL BOTTOM
     private void injectDJButtonsSystem() {
         String js = "if(!window.djShieldActive) { " +
                 "  window.djShieldActive = true; " +
@@ -591,7 +640,6 @@ public class MainActivity extends Activity {
                 "    link.setAttribute('dj-hooked', 'true'); " +
                 "    if(!link.querySelector('img') && !link.querySelector('ytm-custom-thumbnail') && !link.querySelector('.yt-core-image')) return; " +
                 
-                // Overlay Design (Transparent at bottom)
                 "    link.style.position = 'relative'; " +
                 "    var btnContainer = document.createElement('div'); " +
                 "    btnContainer.style = 'position:absolute; bottom:0px; left:0px; right:0px; display:flex; gap:4px; padding:4px; background:rgba(0,0,0,0.5); justify-content:center; z-index:99;'; " +
