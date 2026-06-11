@@ -31,7 +31,6 @@ public class YTMediaSessionManager {
     private BroadcastReceiver actionReceiver;
     private YTActionCallback callback;
 
-    // Interface jiske zariye MainActivity me JS code fire hoga (Play/Pause)
     public interface YTActionCallback {
         void onPlay();
         void onPause();
@@ -65,21 +64,31 @@ public class YTMediaSessionManager {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             mediaSession = new MediaSession(context, "YT_SESSION");
             mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
+            
+            // 🛠️ FIX: BLUETOOTH & HARDWARE BUTTON INTERCEPTOR
+            mediaSession.setCallback(new MediaSession.Callback() {
+                @Override
+                public void onPlay() { if(callback != null) callback.onPlay(); }
+                @Override
+                public void onPause() { if(callback != null) callback.onPause(); }
+                @Override
+                public void onSkipToNext() { if(callback != null) callback.onNext(); }
+                @Override
+                public void onSkipToPrevious() { if(callback != null) callback.onPrev(); }
+            });
+
             mediaSession.setActive(true);
         }
     }
 
-    // Is function ko hum MainActivity se call karenge jab YouTube me gaana play/pause hoga
     public void updateNotification(boolean isPlaying, String title, String artist, Bitmap art) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
 
-        // Playback state update (Lockscreen sync)
         PlaybackState.Builder stateBuilder = new PlaybackState.Builder()
                 .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS);
         stateBuilder.setState(isPlaying ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f);
         mediaSession.setPlaybackState(stateBuilder.build());
 
-        // Song Info update
         MediaMetadata.Builder metadataBuilder = new MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE, title)
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, artist);
@@ -92,7 +101,6 @@ public class YTMediaSessionManager {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : 
                 PendingIntent.FLAG_UPDATE_CURRENT;
 
-        // Buttons ke actions
         PendingIntent playPI = PendingIntent.getBroadcast(context, 1, new Intent(ACTION_YT_PLAY), pendingFlag);
         PendingIntent pausePI = PendingIntent.getBroadcast(context, 2, new Intent(ACTION_YT_PAUSE), pendingFlag);
         PendingIntent nextPI = PendingIntent.getBroadcast(context, 3, new Intent(ACTION_YT_NEXT), pendingFlag);
@@ -106,11 +114,10 @@ public class YTMediaSessionManager {
                .setContentTitle(title)
                .setContentText(artist)
                .setLargeIcon(art)
-               .setOngoing(isPlaying) // Agar pause hai toh user swipe karke hata sakta hai
+               .setOngoing(isPlaying) 
                .setDeleteIntent(closePI)
                .setVisibility(Notification.VISIBILITY_PUBLIC);
 
-        // Native Media Buttons Add karna
         builder.addAction(android.R.drawable.ic_media_previous, "Previous", prevPI);
         if (isPlaying) {
             builder.addAction(android.R.drawable.ic_media_pause, "Pause", pausePI);
@@ -120,14 +127,12 @@ public class YTMediaSessionManager {
         builder.addAction(android.R.drawable.ic_media_next, "Next", nextPI);
         builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Close", closePI);
 
-        // Native Android Media Style Apply karna (Notification ID 2002 ke sath)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             builder.setStyle(new Notification.MediaStyle()
                     .setMediaSession(mediaSession.getSessionToken())
                     .setShowActionsInCompactView(0, 1, 2));
         }
 
-        // Yeh FOREGROUND service nahi hai, normal notification hai (Dost ka logic)
         notificationManager.notify(NOTIFICATION_ID, builder.build());
     }
 
@@ -155,7 +160,6 @@ public class YTMediaSessionManager {
         filter.addAction(ACTION_YT_PREV);
         filter.addAction(ACTION_YT_CLOSE);
 
-        // Android 14 Exported Fix
         if (Build.VERSION.SDK_INT >= 34 && context.getApplicationInfo().targetSdkVersion >= 34) {
             context.registerReceiver(actionReceiver, filter, Context.RECEIVER_EXPORTED);
         } else {
