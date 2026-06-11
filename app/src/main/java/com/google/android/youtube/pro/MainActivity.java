@@ -195,8 +195,9 @@ public class MainActivity extends Activity {
         btnRefresh.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         btnRefresh.setTextColor(android.graphics.Color.WHITE);
         btnRefresh.setPadding(0, 0, 0, 0);
+        // 🔄 JS Force Reload (100% kaam karega)
         btnRefresh.setOnClickListener(v -> {
-            if(ytHomeWeb != null) ytHomeWeb.reload();
+            if(ytHomeWeb != null) ytHomeWeb.evaluateJavascript("window.location.reload(true);", null);
         });
         ytHeader.addView(btnRefresh, new LinearLayout.LayoutParams(100, -1));
 
@@ -237,25 +238,41 @@ public class MainActivity extends Activity {
 
         ytWrapper.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
 
+        // 🔲 FULLSCREEN LOGIC (UPDATED: Centered with Tiny Padding & Smooth Animation)
         btnFullscreen.setOnClickListener(v -> {
             if (!isFullscreen) {
-                preFullW = ytWrapper.getWidth(); preFullH = ytWrapper.getHeight();
-                preFullX = ytWrapper.getX(); preFullY = ytWrapper.getY();
+                // Purani state memory me save karo
+                preFullW = ytWrapper.getWidth(); 
+                preFullH = ytWrapper.getHeight();
+                preFullX = ytWrapper.getX(); 
+                preFullY = ytWrapper.getY();
                 
+                // 0.5px jaisi patli padding ke liye 4 pixels (high-res screens ke hisaab se perfect)
+                int pad = 4; 
+                int newWidth = rootContainer.getWidth() - (pad * 2);
+                int newHeight = rootContainer.getHeight() - (pad * 2);
+
                 FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) ytWrapper.getLayoutParams();
-                p.width = FrameLayout.LayoutParams.MATCH_PARENT; p.height = FrameLayout.LayoutParams.MATCH_PARENT;
+                p.width = newWidth; 
+                p.height = newHeight;
                 p.leftMargin = 0; p.topMargin = 0;
                 ytWrapper.setLayoutParams(p);
-                ytWrapper.setX(0); ytWrapper.setY(0);
+                
+                // Top-Left bhagne ki jagah properly center me set hoga with smooth expanding animation
+                ytWrapper.animate().x(pad).y(pad).setDuration(200).start();
                 
                 btnFullscreen.setText("🔽");
                 rightHandle.setVisibility(View.GONE); bottomHandle.setVisibility(View.GONE); cornerHandle.setVisibility(View.GONE);
                 isFullscreen = true;
             } else {
+                // Purani choti size wapas laao
                 FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) ytWrapper.getLayoutParams();
-                p.width = preFullW; p.height = preFullH;
+                p.width = preFullW; 
+                p.height = preFullH;
                 ytWrapper.setLayoutParams(p);
-                ytWrapper.setX(preFullX); ytWrapper.setY(preFullY);
+                
+                // Wapas usi jagah smooth shrink hoga jahan save tha
+                ytWrapper.animate().x(preFullX).y(preFullY).setDuration(200).start();
                 
                 btnFullscreen.setText("🔲");
                 rightHandle.setVisibility(View.VISIBLE); bottomHandle.setVisibility(View.VISIBLE); cornerHandle.setVisibility(View.VISIBLE);
