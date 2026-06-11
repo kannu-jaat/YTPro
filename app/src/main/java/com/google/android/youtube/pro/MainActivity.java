@@ -73,7 +73,6 @@ public class MainActivity extends Activity {
     private boolean isYtVisible = true;
     private boolean isZoomLocked = true; 
 
-    // 💾 MEMORY & FULLSCREEN VARIABLES
     private boolean isFullscreen = false;
     private int preFullW, preFullH;
     private float preFullX, preFullY;
@@ -138,7 +137,6 @@ public class MainActivity extends Activity {
         });
     }
 
-    // 🔥 DYNAMIC LAYOUT WITH MEMORY, FULLSCREEN & REFRESH
     private void setupDynamicLayout() {
         rootContainer = new FrameLayout(this);
         rootContainer.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
@@ -149,7 +147,6 @@ public class MainActivity extends Activity {
 
         ytWrapper = new FrameLayout(this);
         
-        // 💾 FETCH MEMORY STATE
         int w = getResources().getDisplayMetrics().widthPixels;
         int h = getResources().getDisplayMetrics().heightPixels;
         int savedW = prefs.getInt("yt_w", (int)(w * 0.90));
@@ -193,7 +190,6 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
         ytHeader.addView(headerTitle, titleParams);
 
-        // 🔄 REFRESH BUTTON
         Button btnRefresh = new Button(this);
         btnRefresh.setText("🔄");
         btnRefresh.setBackgroundColor(android.graphics.Color.TRANSPARENT);
@@ -204,7 +200,6 @@ public class MainActivity extends Activity {
         });
         ytHeader.addView(btnRefresh, new LinearLayout.LayoutParams(100, -1));
 
-        // 🔲 FULLSCREEN BUTTON
         Button btnFullscreen = new Button(this);
         btnFullscreen.setText("🔲");
         btnFullscreen.setBackgroundColor(android.graphics.Color.TRANSPARENT);
@@ -219,7 +214,6 @@ public class MainActivity extends Activity {
         innerVertical.addView(ytHomeWeb);
         ytWrapper.addView(innerVertical, new FrameLayout.LayoutParams(-1, -1));
 
-        // 🛠️ PINK RESIZE HANDLES
         View rightHandle = new View(this);
         rightHandle.setBackgroundColor(android.graphics.Color.parseColor("#ff69b4")); 
         FrameLayout.LayoutParams rParams = new FrameLayout.LayoutParams(15, -1); 
@@ -243,49 +237,37 @@ public class MainActivity extends Activity {
 
         ytWrapper.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
 
-        // 🔲 FULLSCREEN LOGIC
         btnFullscreen.setOnClickListener(v -> {
             if (!isFullscreen) {
-                // Save current state before going fullscreen
-                preFullW = ytWrapper.getWidth();
-                preFullH = ytWrapper.getHeight();
-                preFullX = ytWrapper.getX();
-                preFullY = ytWrapper.getY();
+                preFullW = ytWrapper.getWidth(); preFullH = ytWrapper.getHeight();
+                preFullX = ytWrapper.getX(); preFullY = ytWrapper.getY();
                 
                 FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) ytWrapper.getLayoutParams();
-                p.width = FrameLayout.LayoutParams.MATCH_PARENT;
-                p.height = FrameLayout.LayoutParams.MATCH_PARENT;
+                p.width = FrameLayout.LayoutParams.MATCH_PARENT; p.height = FrameLayout.LayoutParams.MATCH_PARENT;
                 p.leftMargin = 0; p.topMargin = 0;
                 ytWrapper.setLayoutParams(p);
                 ytWrapper.setX(0); ytWrapper.setY(0);
                 
                 btnFullscreen.setText("🔽");
-                rightHandle.setVisibility(View.GONE);
-                bottomHandle.setVisibility(View.GONE);
-                cornerHandle.setVisibility(View.GONE);
+                rightHandle.setVisibility(View.GONE); bottomHandle.setVisibility(View.GONE); cornerHandle.setVisibility(View.GONE);
                 isFullscreen = true;
             } else {
-                // Restore previous state
                 FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) ytWrapper.getLayoutParams();
-                p.width = preFullW;
-                p.height = preFullH;
+                p.width = preFullW; p.height = preFullH;
                 ytWrapper.setLayoutParams(p);
                 ytWrapper.setX(preFullX); ytWrapper.setY(preFullY);
                 
                 btnFullscreen.setText("🔲");
-                rightHandle.setVisibility(View.VISIBLE);
-                bottomHandle.setVisibility(View.VISIBLE);
-                cornerHandle.setVisibility(View.VISIBLE);
+                rightHandle.setVisibility(View.VISIBLE); bottomHandle.setVisibility(View.VISIBLE); cornerHandle.setVisibility(View.VISIBLE);
                 isFullscreen = false;
             }
         });
 
-        // 🖱️ DRAG LOGIC (With Save Memory)
         ytHeader.setOnTouchListener(new View.OnTouchListener() {
             float dX, dY;
             @Override
             public boolean onTouch(View view, MotionEvent event) {
-                if(isFullscreen) return false; // Prevent drag in fullscreen
+                if(isFullscreen) return false; 
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
                         dX = ytWrapper.getX() - event.getRawX();
@@ -302,7 +284,6 @@ public class MainActivity extends Activity {
             }
         });
 
-        // 📐 RESIZE LOGIC (With Save Memory)
         View.OnTouchListener resizeListener = new View.OnTouchListener() {
             float initialX, initialY;
             int initialWidth, initialHeight;
@@ -310,24 +291,18 @@ public class MainActivity extends Activity {
             public boolean onTouch(View view, MotionEvent event) {
                 switch(event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
-                        initialX = event.getRawX();
-                        initialY = event.getRawY();
-                        initialWidth = ytWrapper.getWidth();
-                        initialHeight = ytWrapper.getHeight();
+                        initialX = event.getRawX(); initialY = event.getRawY();
+                        initialWidth = ytWrapper.getWidth(); initialHeight = ytWrapper.getHeight();
                         return true;
                     case MotionEvent.ACTION_MOVE:
-                        int newWidth = initialWidth;
-                        int newHeight = initialHeight;
-                        
+                        int newWidth = initialWidth; int newHeight = initialHeight;
                         if (view == rightHandle || view == cornerHandle) newWidth = initialWidth + (int)(event.getRawX() - initialX);
                         if (view == bottomHandle || view == cornerHandle) newHeight = initialHeight + (int)(event.getRawY() - initialY);
                         
-                        if(newWidth < 400) newWidth = 400;
-                        if(newHeight < 300) newHeight = 300;
+                        if(newWidth < 400) newWidth = 400; if(newHeight < 300) newHeight = 300;
                         
                         FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) ytWrapper.getLayoutParams();
-                        p.width = newWidth;
-                        p.height = newHeight;
+                        p.width = newWidth; p.height = newHeight;
                         ytWrapper.setLayoutParams(p);
                         return true;
                     case MotionEvent.ACTION_UP:
@@ -389,10 +364,13 @@ public class MainActivity extends Activity {
             });
         }
 
+        // 🛡️ NAYA UPDATE YAHAN HAI: YouTube ko Cookies, Cache aur Premium Mobile Agent de diya
         ytHomeWeb.getSettings().setJavaScriptEnabled(true);
         ytHomeWeb.getSettings().setDomStorageEnabled(true);
         ytHomeWeb.getSettings().setDatabaseEnabled(true);
         ytHomeWeb.getSettings().setMediaPlaybackRequiresUserGesture(false); 
+        ytHomeWeb.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_DEFAULT);
+        ytHomeWeb.getSettings().setUserAgentString("Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
         
         ytHomeWeb.setWebViewClient(new YTProWebViewClient(this, ytHomeWeb) {
             @Override
@@ -416,10 +394,12 @@ public class MainActivity extends Activity {
         web.getSettings().setMediaPlaybackRequiresUserGesture(false); 
         web.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
+        // 🍪 Cookies manager updated to save YT memory
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             cookieManager.setAcceptThirdPartyCookies(web, true);
+            cookieManager.setAcceptThirdPartyCookies(ytHomeWeb, true); // ✅ YouTube memory enabled
         }
 
         web.addJavascriptInterface(new WebAppInterface(this, web), "Android");
