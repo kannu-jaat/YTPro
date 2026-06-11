@@ -63,9 +63,10 @@ public class YTMediaSessionManager {
     private void initMediaSession() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             mediaSession = new MediaSession(context, "YT_SESSION");
+            // FLAG_HANDLES_MEDIA_BUTTONS Hardware Bluetooth / Earphone buttons ko allow karta hai
             mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
             
-            // 🛠️ FIX: BLUETOOTH & HARDWARE BUTTON INTERCEPTOR
+            // 🎧 NAYA: BLUETOOTH / HARDWARE BUTTON INTERCEPTOR
             mediaSession.setCallback(new MediaSession.Callback() {
                 @Override
                 public void onPlay() { if(callback != null) callback.onPlay(); }
@@ -76,7 +77,7 @@ public class YTMediaSessionManager {
                 @Override
                 public void onSkipToPrevious() { if(callback != null) callback.onPrev(); }
             });
-
+            
             mediaSession.setActive(true);
         }
     }
@@ -177,9 +178,7 @@ public class YTMediaSessionManager {
     public void destroy() {
         cancelNotification();
         if (actionReceiver != null) {
-            try {
-                context.unregisterReceiver(actionReceiver);
-            } catch (Exception e) {}
+            try { context.unregisterReceiver(actionReceiver); } catch (Exception e) {}
         }
         if (mediaSession != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             mediaSession.release();
