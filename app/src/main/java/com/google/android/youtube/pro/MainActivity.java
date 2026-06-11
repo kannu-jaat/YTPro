@@ -370,7 +370,9 @@ public class MainActivity extends Activity {
         ytHomeWeb.getSettings().setDatabaseEnabled(true);
         ytHomeWeb.getSettings().setMediaPlaybackRequiresUserGesture(false); 
         ytHomeWeb.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_DEFAULT);
-        ytHomeWeb.getSettings().setUserAgentString("Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+      
+  // 🛡️ BOT PROTECTION BYPASS: Android ka default mobile webview signature jise Google bot nahi maanta
+ytHomeWeb.getSettings().setUserAgentString("Mozilla/5.0 (Linux; Android " + Build.VERSION.RELEASE + "; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120.0.0.0 Mobile Safari/537.36");
         
         ytHomeWeb.setWebViewClient(new YTProWebViewClient(this, ytHomeWeb) {
             @Override
