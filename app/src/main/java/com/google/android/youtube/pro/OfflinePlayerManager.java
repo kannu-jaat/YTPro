@@ -5,12 +5,10 @@ import android.content.ContentUris;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.database.Cursor;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.drawable.GradientDrawable;
-import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
@@ -23,8 +21,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -33,7 +31,6 @@ import android.widget.Toast;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Set;
 
 public class OfflinePlayerManager {
@@ -45,18 +42,24 @@ public class OfflinePlayerManager {
     private LinearLayout miniPlayer;
     private SharedPreferences prefs;
 
-    // Media Player
+    // Media Player Logic
     private MediaPlayer mediaPlayer;
     private ArrayList<AudioTrack> trackList;
+    private ArrayList<AudioTrack> displayList; // For searching
     private int currentTrackIndex = -1;
     private boolean isPlaying = false;
 
-    // Mini Player UI
-    private TextView mpTitle, mpArtist;
+    // Colors from Design
+    private final String BG_DARK = "#050505";
+    private final String GLASS_BG = "#121212";
+    private final String NEON_LIME = "#C4F038";
+    private final String TEXT_MUTED = "#888888";
+
+    // UI Elements
+    private TextView mpTitle, mpArtist, mpCurrentTime, mpTotalTime;
     private Button mpPlayPauseBtn;
     private HeartbeatSeekBar heartbeatSeekBar;
     private Handler progressHandler = new Handler(Looper.getMainLooper());
-
     private DJDeckListener deckListener;
 
     public interface DJDeckListener {
@@ -64,9 +67,11 @@ public class OfflinePlayerManager {
     }
 
     static class AudioTrack {
-        long id; String title; String artist; String path; String folder; Uri uri; long duration;
+        long id; String title; String artist; String path; String folder; Uri uri; long duration; String durationStr;
         AudioTrack(long id, String t, String a, String p, String f, Uri u, long d) {
             this.id = id; title = t; artist = a; path = p; folder = f; uri = u; duration = d;
+            long min = (duration / 1000) / 60; long sec = (duration / 1000) % 60;
+            this.durationStr = String.format("%d:%02d", min, sec);
         }
     }
 
@@ -76,123 +81,262 @@ public class OfflinePlayerManager {
         this.deckListener = listener;
         this.prefs = context.getSharedPreferences("DJ_OFFLINE_PREFS", Context.MODE_PRIVATE);
         this.trackList = new ArrayList<>();
+        this.displayList = new ArrayList<>();
         initUI();
     }
 
-    // 🔥 THE GLASSMORPHISM & NEON UI ENGINE
+    // 🎨 UI ENGINE (DITTO COPY DESIGN)
     private void initUI() {
         mainUI = new FrameLayout(context);
         mainUI.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
-        mainUI.setBackgroundColor(android.graphics.Color.parseColor("#0B0F19")); // Deep Dark Theme
+        mainUI.setBackgroundColor(Color.parseColor(BG_DARK));
         mainUI.setVisibility(View.GONE);
 
         LinearLayout verticalLayout = new LinearLayout(context);
         verticalLayout.setOrientation(LinearLayout.VERTICAL);
         verticalLayout.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
+        verticalLayout.setPadding(30, 40, 30, 0);
 
-        // 🛡️ HEADER: Title & Blocked Folders Mgr
+        // 1. TOP HEADER (Lite Player & Settings)
         LinearLayout header = new LinearLayout(context);
         header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setPadding(40, 40, 40, 20);
         header.setGravity(Gravity.CENTER_VERTICAL);
         
+        TextView logoIcon = new TextView(context);
+        logoIcon.setText(" ılı "); // Visualizer logo
+        logoIcon.setTextColor(Color.parseColor(BG_DARK));
+        logoIcon.setTextSize(18f);
+        GradientDrawable logoBg = new GradientDrawable();
+        logoBg.setColor(Color.parseColor(NEON_LIME));
+        logoBg.setCornerRadius(20f);
+        logoIcon.setBackground(logoBg);
+        logoIcon.setPadding(15, 10, 15, 10);
+        
+        LinearLayout titleBox = new LinearLayout(context);
+        titleBox.setOrientation(LinearLayout.VERTICAL);
+        titleBox.setPadding(20, 0, 0, 0);
+        
         TextView title = new TextView(context);
-        title.setText("🎵 Local Library");
-        title.setTextColor(android.graphics.Color.WHITE);
-        title.setTextSize(22f);
+        title.setText("Lite Player");
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(20f);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
+        
+        TextView subTitle = new TextView(context);
+        subTitle.setText("Feel the music");
+        subTitle.setTextColor(Color.parseColor(TEXT_MUTED));
+        subTitle.setTextSize(12f);
+        
+        titleBox.addView(title);
+        titleBox.addView(subTitle);
+        
         LinearLayout.LayoutParams tParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
-        header.addView(title, tParams);
+        header.addView(logoIcon);
+        header.addView(titleBox, tParams);
 
-        Button btnUnblock = new Button(context);
-        btnUnblock.setText("🛡️ Unblock");
-        btnUnblock.setTextColor(android.graphics.Color.parseColor("#A78BFA")); // Purple Tint
-        btnUnblock.setBackgroundColor(android.graphics.Color.TRANSPARENT);
-        btnUnblock.setOnClickListener(v -> manageBlockedFolders());
-        header.addView(btnUnblock);
+        Button btnSettings = createIconBtn("⚙️", GLASS_BG, Color.WHITE);
+        btnSettings.setOnClickListener(v -> manageBlockedFolders()); // Blocked Folders Manager
+        header.addView(btnSettings);
 
-        // 🎶 LIST VIEW (Track List)
+        // 2. SEARCH BAR (Glassy Pill)
+        LinearLayout searchBox = new LinearLayout(context);
+        searchBox.setOrientation(LinearLayout.HORIZONTAL);
+        searchBox.setGravity(Gravity.CENTER_VERTICAL);
+        GradientDrawable searchBg = new GradientDrawable();
+        searchBg.setColor(Color.parseColor(GLASS_BG));
+        searchBg.setStroke(2, Color.parseColor("#222222"));
+        searchBg.setCornerRadius(60f);
+        searchBox.setBackground(searchBg);
+        searchBox.setPadding(40, 10, 20, 10);
+        LinearLayout.LayoutParams sParams = new LinearLayout.LayoutParams(-1, 120);
+        sParams.setMargins(0, 40, 0, 40);
+        searchBox.setLayoutParams(sParams);
+
+        TextView searchIcon = new TextView(context);
+        searchIcon.setText("🔍");
+        searchIcon.setTextSize(16f);
+        
+        EditText searchInput = new EditText(context);
+        searchInput.setHint("Search audio...");
+        searchInput.setHintTextColor(Color.parseColor(TEXT_MUTED));
+        searchInput.setTextColor(Color.WHITE);
+        searchInput.setBackgroundColor(Color.TRANSPARENT);
+        searchInput.setSingleLine(true);
+        searchInput.setLayoutParams(new LinearLayout.LayoutParams(0, -1, 1.0f));
+
+        TextView filterIcon = new TextView(context);
+        filterIcon.setText("🎚️");
+        filterIcon.setTextColor(Color.parseColor(NEON_LIME));
+        filterIcon.setTextSize(16f);
+
+        searchBox.addView(searchIcon);
+        searchBox.addView(searchInput);
+        searchBox.addView(filterIcon);
+
+        // 3. SECTION TITLE (All Audio)
+        LinearLayout sectionBox = new LinearLayout(context);
+        sectionBox.setOrientation(LinearLayout.HORIZONTAL);
+        sectionBox.setGravity(Gravity.BOTTOM);
+        sectionBox.setPadding(0, 0, 0, 20);
+
+        TextView allAudioTxt = new TextView(context);
+        allAudioTxt.setText("All Audio");
+        allAudioTxt.setTextColor(Color.WHITE);
+        allAudioTxt.setTextSize(18f);
+        allAudioTxt.setTypeface(null, android.graphics.Typeface.BOLD);
+        
+        TextView sortTxt = new TextView(context);
+        sortTxt.setText("Recently Added ⌄");
+        sortTxt.setTextColor(Color.parseColor(NEON_LIME));
+        sortTxt.setTextSize(12f);
+        sortTxt.setGravity(Gravity.RIGHT);
+
+        sectionBox.addView(allAudioTxt, new LinearLayout.LayoutParams(0, -2, 1.0f));
+        sectionBox.addView(sortTxt);
+
+        // 4. LIST VIEW
         listView = new ListView(context);
         listView.setDivider(null);
-        listView.setPadding(20, 0, 20, 200); // Bottom padding for mini player
         listView.setClipToPadding(false);
-        LinearLayout.LayoutParams lParams = new LinearLayout.LayoutParams(-1, 0, 1.0f);
+        listView.setPadding(0, 0, 0, 450); // Massive padding to scroll over Mini Player
         
-        // 🎛️ MINI PLAYER (Bottom Fixed)
+        verticalLayout.addView(header);
+        verticalLayout.addView(searchBox);
+        verticalLayout.addView(sectionBox);
+        verticalLayout.addView(listView, new LinearLayout.LayoutParams(-1, -1));
+
         setupMiniPlayer();
 
-        verticalLayout.addView(header);
-        verticalLayout.addView(listView, lParams);
-        
         mainUI.addView(verticalLayout);
-        mainUI.addView(miniPlayer); // Add mini player on top of everything at bottom
+        mainUI.addView(miniPlayer); 
         parentContainer.addView(mainUI);
     }
 
+    // 🎛️ PREMIUM MINI PLAYER (Wavy Neon Glass)
     private void setupMiniPlayer() {
         miniPlayer = new LinearLayout(context);
         miniPlayer.setOrientation(LinearLayout.VERTICAL);
         FrameLayout.LayoutParams mParams = new FrameLayout.LayoutParams(-1, -2);
         mParams.gravity = Gravity.BOTTOM;
-        mParams.setMargins(30, 0, 30, 30);
         miniPlayer.setLayoutParams(mParams);
 
-        // Glassmorphic Background for Mini Player
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(android.graphics.Color.parseColor("#20FFFFFF")); // 12% White
-        bg.setCornerRadius(40f);
-        bg.setStroke(2, android.graphics.Color.parseColor("#30FFFFFF"));
+        bg.setColor(Color.parseColor("#080A04")); // Deep greenish dark
+        bg.setStroke(3, Color.parseColor("#3A4A15")); // Glowing border
+        bg.setCornerRadii(new float[]{80f, 80f, 80f, 80f, 0f, 0f, 0f, 0f}); // Top rounded
         miniPlayer.setBackground(bg);
-        miniPlayer.setPadding(40, 30, 40, 30);
+        miniPlayer.setPadding(40, 50, 40, 50);
 
-        // Info Row
+        // Top Row: Info
         LinearLayout infoRow = new LinearLayout(context);
         infoRow.setOrientation(LinearLayout.HORIZONTAL);
         infoRow.setGravity(Gravity.CENTER_VERTICAL);
-
+        
         LinearLayout textLayout = new LinearLayout(context);
         textLayout.setOrientation(LinearLayout.VERTICAL);
         mpTitle = new TextView(context);
         mpTitle.setText("Not Playing");
-        mpTitle.setTextColor(android.graphics.Color.WHITE);
+        mpTitle.setTextColor(Color.WHITE);
         mpTitle.setTextSize(16f);
         mpTitle.setTypeface(null, android.graphics.Typeface.BOLD);
         mpArtist = new TextView(context);
-        mpArtist.setText("--");
-        mpArtist.setTextColor(android.graphics.Color.LTGRAY);
-        mpArtist.setTextSize(12f);
+        mpArtist.setText("Select a track");
+        mpArtist.setTextColor(Color.parseColor(TEXT_MUTED));
+        mpArtist.setTextSize(13f);
         textLayout.addView(mpTitle);
         textLayout.addView(mpArtist);
-        LinearLayout.LayoutParams txtParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
-        infoRow.addView(textLayout, txtParams);
-
-        // Controls
-        Button btnPrev = createMiniBtn("⏮️");
-        btnPrev.setOnClickListener(v -> playPrev());
-        mpPlayPauseBtn = createMiniBtn("▶️");
-        mpPlayPauseBtn.setOnClickListener(v -> togglePlayPause());
-        Button btnNext = createMiniBtn("⏭️");
-        btnNext.setOnClickListener(v -> playNext());
-
-        infoRow.addView(btnPrev);
-        infoRow.addView(mpPlayPauseBtn);
-        infoRow.addView(btnNext);
-
-        // 💓 HEARTBEAT SEEKBAR (Sci-Fi)
-        heartbeatSeekBar = new HeartbeatSeekBar(context);
-        LinearLayout.LayoutParams hbParams = new LinearLayout.LayoutParams(-1, 60);
-        hbParams.setMargins(0, 20, 0, 0);
         
+        TextView visualizerIcon = new TextView(context);
+        visualizerIcon.setText(" ılılı ");
+        visualizerIcon.setTextColor(Color.parseColor(NEON_LIME));
+        visualizerIcon.setTextSize(14f);
+        GradientDrawable visBg = new GradientDrawable();
+        visBg.setColor(Color.parseColor("#1A2508"));
+        visBg.setCornerRadius(30f);
+        visualizerIcon.setBackground(visBg);
+        visualizerIcon.setPadding(20, 15, 20, 15);
+
+        infoRow.addView(textLayout, new LinearLayout.LayoutParams(0, -2, 1.0f));
+        infoRow.addView(visualizerIcon);
+
+        // Heartbeat Seekbar & Timestamps
+        heartbeatSeekBar = new HeartbeatSeekBar(context);
+        LinearLayout.LayoutParams hbParams = new LinearLayout.LayoutParams(-1, 80);
+        hbParams.setMargins(0, 30, 0, 10);
+        
+        LinearLayout timeRow = new LinearLayout(context);
+        timeRow.setOrientation(LinearLayout.HORIZONTAL);
+        mpCurrentTime = new TextView(context);
+        mpCurrentTime.setText("0:00");
+        mpCurrentTime.setTextColor(Color.parseColor(NEON_LIME));
+        mpCurrentTime.setTextSize(11f);
+        mpTotalTime = new TextView(context);
+        mpTotalTime.setText("0:00");
+        mpTotalTime.setTextColor(Color.parseColor(TEXT_MUTED));
+        mpTotalTime.setTextSize(11f);
+        mpTotalTime.setGravity(Gravity.RIGHT);
+        timeRow.addView(mpCurrentTime, new LinearLayout.LayoutParams(0, -2, 1.0f));
+        timeRow.addView(mpTotalTime);
+
+        // Control Row
+        LinearLayout ctrlRow = new LinearLayout(context);
+        ctrlRow.setOrientation(LinearLayout.HORIZONTAL);
+        ctrlRow.setGravity(Gravity.CENTER);
+        ctrlRow.setPadding(0, 30, 0, 0);
+
+        Button btnShuffle = createTextBtn("🔀", NEON_LIME);
+        Button btnPrev = createTextBtn("⏮", "#FFFFFF");
+        btnPrev.setOnClickListener(v -> playPrev());
+        
+        // Huge Neon Play Button
+        mpPlayPauseBtn = new Button(context);
+        mpPlayPauseBtn.setText("▶");
+        mpPlayPauseBtn.setTextColor(Color.parseColor(NEON_LIME));
+        mpPlayPauseBtn.setTextSize(26f);
+        GradientDrawable playBg = new GradientDrawable();
+        playBg.setColor(Color.parseColor("#111A05"));
+        playBg.setStroke(4, Color.parseColor(NEON_LIME));
+        playBg.setShape(GradientDrawable.OVAL);
+        mpPlayPauseBtn.setBackground(playBg);
+        mpPlayPauseBtn.setOnClickListener(v -> togglePlayPause());
+        LinearLayout.LayoutParams playParams = new LinearLayout.LayoutParams(140, 140);
+        playParams.setMargins(40, 0, 40, 0);
+        
+        Button btnNext = createTextBtn("⏭", "#FFFFFF");
+        btnNext.setOnClickListener(v -> playNext());
+        Button btnRepeat = createTextBtn("🔁", NEON_LIME);
+
+        ctrlRow.addView(btnShuffle, new LinearLayout.LayoutParams(0, -2, 1.0f));
+        ctrlRow.addView(btnPrev);
+        ctrlRow.addView(mpPlayPauseBtn, playParams);
+        ctrlRow.addView(btnNext);
+        ctrlRow.addView(btnRepeat, new LinearLayout.LayoutParams(0, -2, 1.0f));
+
         miniPlayer.addView(infoRow);
         miniPlayer.addView(heartbeatSeekBar, hbParams);
+        miniPlayer.addView(timeRow);
+        miniPlayer.addView(ctrlRow);
     }
 
-    private Button createMiniBtn(String icon) {
+    private Button createIconBtn(String icon, String bgColor, int textColor) {
         Button b = new Button(context);
         b.setText(icon);
-        b.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        b.setTextColor(textColor);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor(bgColor));
+        bg.setCornerRadius(50f);
+        b.setBackground(bg);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(100, 100);
+        b.setLayoutParams(p);
+        return b;
+    }
+
+    private Button createTextBtn(String icon, String color) {
+        Button b = new Button(context);
+        b.setText(icon);
+        b.setTextColor(Color.parseColor(color));
+        b.setBackgroundColor(Color.TRANSPARENT);
         b.setTextSize(20f);
-        b.setPadding(10, 0, 10, 0);
         return b;
     }
 
@@ -201,11 +345,11 @@ public class OfflinePlayerManager {
             mainUI.setVisibility(View.GONE);
         } else {
             mainUI.setVisibility(View.VISIBLE);
-            loadAudioFiles(); // Refresh list when opened
+            loadAudioFiles();
         }
     }
 
-    // 🚫 SMART FOLDER BLOCKER LOGIC
+    // 🛡️ THE AUDIO SCANNER & FOLDER BLOCKER
     private void loadAudioFiles() {
         trackList.clear();
         Set<String> blockedFolders = prefs.getStringSet("BLOCKED_FOLDERS", new HashSet<>());
@@ -227,7 +371,7 @@ public class OfflinePlayerManager {
                         String folderName = f.getParentFile() != null ? f.getParentFile().getName() : "Unknown";
                         
                         // Ignore short audios & Blocked Folders
-                        if (duration > 30000 && !blockedFolders.contains(folderName)) {
+                        if (duration > 20000 && !blockedFolders.contains(folderName)) {
                             Uri uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id);
                             trackList.add(new AudioTrack(id, title, artist, path, folderName, uri, duration));
                         }
@@ -236,86 +380,103 @@ public class OfflinePlayerManager {
             }
         } catch (Exception e) { e.printStackTrace(); }
 
+        displayList.clear();
+        displayList.addAll(trackList);
         updateListView();
     }
 
     private void updateListView() {
-        ArrayAdapter<AudioTrack> adapter = new ArrayAdapter<AudioTrack>(context, android.R.layout.simple_list_item_1, trackList) {
+        ArrayAdapter<AudioTrack> adapter = new ArrayAdapter<AudioTrack>(context, android.R.layout.simple_list_item_1, displayList) {
             @Override
             public View getView(int position, View convertView, ViewGroup parent) {
                 LinearLayout row;
                 if (convertView == null) {
                     row = new LinearLayout(context);
                     row.setOrientation(LinearLayout.HORIZONTAL);
-                    row.setPadding(20, 20, 20, 20);
+                    row.setPadding(30, 30, 30, 30);
                     row.setGravity(Gravity.CENTER_VERTICAL);
                     
-                    // Glassmorphism Row Background
                     GradientDrawable bg = new GradientDrawable();
-                    bg.setColor(android.graphics.Color.parseColor("#151E2E"));
-                    bg.setCornerRadius(25f);
+                    bg.setColor(Color.parseColor(GLASS_BG));
+                    bg.setCornerRadius(45f);
                     row.setBackground(bg);
                     
                     LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
-                    rowParams.setMargins(0, 0, 0, 15);
+                    rowParams.setMargins(0, 0, 0, 25);
                     row.setLayoutParams(rowParams);
 
                     // Track Info
                     LinearLayout textLayout = new LinearLayout(context);
                     textLayout.setOrientation(LinearLayout.VERTICAL);
+                    textLayout.setPadding(20, 0, 10, 0);
+                    
                     TextView tName = new TextView(context);
                     tName.setId(View.generateViewId());
-                    tName.setTextColor(android.graphics.Color.WHITE);
-                    tName.setTextSize(15f);
+                    tName.setTextColor(Color.WHITE);
+                    tName.setTextSize(16f);
+                    tName.setTypeface(null, android.graphics.Typeface.BOLD);
                     tName.setMaxLines(1);
                     tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
                     
-                    TextView tFolder = new TextView(context);
-                    tFolder.setId(View.generateViewId());
-                    tFolder.setTextColor(android.graphics.Color.GRAY);
-                    tFolder.setTextSize(11f);
+                    TextView tArtist = new TextView(context);
+                    tArtist.setId(View.generateViewId());
+                    tArtist.setTextColor(Color.parseColor(TEXT_MUTED));
+                    tArtist.setTextSize(12f);
                     
                     textLayout.addView(tName);
-                    textLayout.addView(tFolder);
+                    textLayout.addView(tArtist);
                     LinearLayout.LayoutParams txtParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
-                    row.addView(textLayout, txtParams);
-
-                    // 🎛️ The 3 Master Buttons
-                    Button btnPlay = createRowBtn("▶️", "#34D399"); // Neon Green
-                    Button btnLeft = createRowBtn("L", "#A78BFA");  // Purple
-                    Button btnRight = createRowBtn("R", "#38BDF8"); // Blue
-
-                    row.addView(btnPlay);
-                    row.addView(btnLeft);
-                    row.addView(btnRight);
                     
-                    row.setTag(new View[]{tName, tFolder, btnPlay, btnLeft, btnRight});
+                    // 🎧 L / R / PLAY Buttons (Glassy Style)
+                    LinearLayout actionBox = new LinearLayout(context);
+                    actionBox.setOrientation(LinearLayout.HORIZONTAL);
+                    actionBox.setGravity(Gravity.CENTER_VERTICAL);
+                    
+                    TextView tTime = new TextView(context);
+                    tTime.setId(View.generateViewId());
+                    tTime.setTextColor(Color.parseColor(TEXT_MUTED));
+                    tTime.setTextSize(12f);
+                    tTime.setPadding(0, 0, 20, 0);
+
+                    Button btnPlay = createRowPill("▶", NEON_LIME, "#111111");
+                    Button btnLeft = createRowPill("L⬅", "#FFFFFF", "#1E1E1E");
+                    Button btnRight = createRowPill("➡️R", "#FFFFFF", "#1E1E1E");
+
+                    actionBox.addView(tTime);
+                    actionBox.addView(btnLeft);
+                    actionBox.addView(btnPlay);
+                    actionBox.addView(btnRight);
+
+                    row.addView(textLayout, txtParams);
+                    row.addView(actionBox);
+                    
+                    row.setTag(new View[]{tName, tArtist, tTime, btnPlay, btnLeft, btnRight});
                 } else {
                     row = (LinearLayout) convertView;
                 }
 
                 View[] views = (View[]) row.getTag();
                 TextView tName = (TextView) views[0];
-                TextView tFolder = (TextView) views[1];
-                Button btnPlay = (Button) views[2];
-                Button btnLeft = (Button) views[3];
-                Button btnRight = (Button) views[4];
+                TextView tArtist = (TextView) views[1];
+                TextView tTime = (TextView) views[2];
+                Button btnPlay = (Button) views[3];
+                Button btnLeft = (Button) views[4];
+                Button btnRight = (Button) views[5];
 
                 AudioTrack track = getItem(position);
                 tName.setText(track.title != null ? track.title : "Unknown Track");
-                tFolder.setText("📁 " + track.folder);
+                tArtist.setText(track.artist != null && !track.artist.contains("unknown") ? track.artist : "📁 " + track.folder);
+                tTime.setText(track.durationStr);
 
-                // Play Audio in App
+                // Actions
                 btnPlay.setOnClickListener(v -> playTrack(position));
-                
-                // Load to Deck L/R
                 btnLeft.setOnClickListener(v -> {
                     if(deckListener != null) deckListener.onLoadToDeck("left", track.uri);
-                    Toast.makeText(context, "Loaded to L Deck 🎧", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(context, "Loaded " + track.title + " to L Deck", Toast.LENGTH_SHORT).show();
                 });
                 btnRight.setOnClickListener(v -> {
                     if(deckListener != null) deckListener.onLoadToDeck("right", track.uri);
-                    Toast.makeText(context, "Loaded to R Deck 🎛️", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(context, "Loaded " + track.title + " to R Deck", Toast.LENGTH_SHORT).show();
                 });
 
                 // Long Press to Block Folder
@@ -330,26 +491,27 @@ public class OfflinePlayerManager {
         listView.setAdapter(adapter);
     }
 
-    private Button createRowBtn(String text, String colorHex) {
+    private Button createRowPill(String text, String textColor, String bgColor) {
         Button b = new Button(context);
         b.setText(text);
-        b.setTextColor(android.graphics.Color.BLACK);
-        b.setTextSize(12f);
+        b.setTextColor(Color.parseColor(textColor));
+        b.setTextSize(11f);
         b.setTypeface(null, android.graphics.Typeface.BOLD);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(android.graphics.Color.parseColor(colorHex));
-        bg.setCornerRadius(15f);
+        bg.setColor(Color.parseColor(bgColor));
+        bg.setCornerRadius(30f);
         b.setBackground(bg);
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(90, 90);
-        p.setMargins(10, 0, 0, 0);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, 70);
+        p.setMargins(8, 0, 8, 0);
         b.setLayoutParams(p);
+        b.setPadding(20, 0, 20, 0);
         return b;
     }
 
     private void showBlockDialog(String folder) {
         new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Block Folder?")
-            .setMessage("Hide all audios from '" + folder + "'?")
+            .setMessage("Do you want to hide all audios from '" + folder + "'? (Good for hiding call recordings)")
             .setPositiveButton("Block", (d, w) -> {
                 Set<String> blocked = new HashSet<>(prefs.getStringSet("BLOCKED_FOLDERS", new HashSet<>()));
                 blocked.add(folder);
@@ -364,7 +526,7 @@ public class OfflinePlayerManager {
     private void manageBlockedFolders() {
         Set<String> blocked = prefs.getStringSet("BLOCKED_FOLDERS", new HashSet<>());
         if (blocked.isEmpty()) {
-            Toast.makeText(context, "No folders blocked.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(context, "No blocked folders.", Toast.LENGTH_SHORT).show();
             return;
         }
         String[] folders = blocked.toArray(new String[0]);
@@ -379,16 +541,15 @@ public class OfflinePlayerManager {
             }).show();
     }
 
-    // 🔄 MEDIA PLAYER ENGINE & AUTO-NEXT
+    // 🔄 CORE AUDIO ENGINE (Auto-Next included)
     private void playTrack(int index) {
-        if (index < 0 || index >= trackList.size()) return;
+        if (index < 0 || index >= displayList.size()) return;
         currentTrackIndex = index;
-        AudioTrack track = trackList.get(index);
+        AudioTrack track = displayList.get(index);
 
         if (mediaPlayer == null) {
             mediaPlayer = new MediaPlayer();
-            // AUTO-NEXT LOGIC
-            mediaPlayer.setOnCompletionListener(mp -> playNext());
+            mediaPlayer.setOnCompletionListener(mp -> playNext()); // 🚀 AUTO NEXT TRIGGER
         } else {
             mediaPlayer.reset();
         }
@@ -398,9 +559,10 @@ public class OfflinePlayerManager {
             mediaPlayer.prepare();
             mediaPlayer.start();
             isPlaying = true;
-            mpPlayPauseBtn.setText("⏸️");
+            mpPlayPauseBtn.setText("⏸");
             mpTitle.setText(track.title);
-            mpArtist.setText(track.artist != null ? track.artist : "Local File");
+            mpArtist.setText(track.artist != null && !track.artist.contains("unknown") ? track.artist : track.folder);
+            mpTotalTime.setText(track.durationStr);
             startProgressUpdater();
         } catch (Exception e) { e.printStackTrace(); }
     }
@@ -410,26 +572,26 @@ public class OfflinePlayerManager {
         if (mediaPlayer.isPlaying()) {
             mediaPlayer.pause();
             isPlaying = false;
-            mpPlayPauseBtn.setText("▶️");
+            mpPlayPauseBtn.setText("▶");
         } else {
             mediaPlayer.start();
             isPlaying = true;
-            mpPlayPauseBtn.setText("⏸️");
+            mpPlayPauseBtn.setText("⏸");
             startProgressUpdater();
         }
     }
 
     private void playNext() {
-        if (trackList.isEmpty()) return;
+        if (displayList.isEmpty()) return;
         int next = currentTrackIndex + 1;
-        if (next >= trackList.size()) next = 0; // Loop back
+        if (next >= displayList.size()) next = 0; 
         playTrack(next);
     }
 
     private void playPrev() {
-        if (trackList.isEmpty()) return;
+        if (displayList.isEmpty()) return;
         int prev = currentTrackIndex - 1;
-        if (prev < 0) prev = trackList.size() - 1;
+        if (prev < 0) prev = displayList.size() - 1;
         playTrack(prev);
     }
 
@@ -438,9 +600,15 @@ public class OfflinePlayerManager {
             @Override
             public void run() {
                 if (mediaPlayer != null && isPlaying) {
-                    float progress = (float) mediaPlayer.getCurrentPosition() / mediaPlayer.getDuration();
+                    int curr = mediaPlayer.getCurrentPosition();
+                    float progress = (float) curr / mediaPlayer.getDuration();
                     heartbeatSeekBar.setProgress(progress);
-                    progressHandler.postDelayed(this, 100); // 10fps smooth update
+                    
+                    long min = (curr / 1000) / 60; 
+                    long sec = (curr / 1000) % 60;
+                    mpCurrentTime.setText(String.format("%d:%02d", min, sec));
+                    
+                    progressHandler.postDelayed(this, 100); 
                 }
             }
         });
@@ -454,32 +622,34 @@ public class OfflinePlayerManager {
         progressHandler.removeCallbacksAndMessages(null);
     }
 
-    // 💓 CUSTOM HEARTBEAT SEEKBAR (Sci-Fi Design)
+    // 💓 DITTO COPY NEON WAVEFORM SEEKBAR
     class HeartbeatSeekBar extends View {
-        private Paint paintPlayed, paintUnplayed;
+        private Paint paintPlayed, paintUnplayed, paintThumb;
         private float progress = 0f;
 
         public HeartbeatSeekBar(Context context) {
             super(context);
             paintPlayed = new Paint();
-            paintPlayed.setColor(android.graphics.Color.parseColor("#34D399")); // Neon Green
-            paintPlayed.setStrokeWidth(6f);
+            paintPlayed.setColor(Color.parseColor(NEON_LIME)); // Lime Green
+            paintPlayed.setStrokeWidth(8f);
             paintPlayed.setStrokeCap(Paint.Cap.ROUND);
 
             paintUnplayed = new Paint();
-            paintUnplayed.setColor(android.graphics.Color.parseColor("#444444")); // Dark Gray
-            paintUnplayed.setStrokeWidth(6f);
+            paintUnplayed.setColor(Color.parseColor("#2A3A10")); // Dark Olive
+            paintUnplayed.setStrokeWidth(8f);
             paintUnplayed.setStrokeCap(Paint.Cap.ROUND);
             
-            // Allow user to seek by touching
+            paintThumb = new Paint();
+            paintThumb.setColor(Color.WHITE);
+            paintThumb.setStrokeWidth(12f);
+            paintThumb.setStrokeCap(Paint.Cap.ROUND);
+
             setOnTouchListener((v, event) -> {
-                if(mediaPlayer != null && event.getAction() == MotionEvent.ACTION_DOWN || event.getAction() == MotionEvent.ACTION_MOVE) {
-                    float touchX = event.getX();
-                    float newProgress = touchX / getWidth();
-                    if(newProgress < 0) newProgress = 0;
-                    if(newProgress > 1) newProgress = 1;
-                    mediaPlayer.seekTo((int)(newProgress * mediaPlayer.getDuration()));
-                    setProgress(newProgress);
+                if(mediaPlayer != null && (event.getAction() == MotionEvent.ACTION_DOWN || event.getAction() == MotionEvent.ACTION_MOVE)) {
+                    float newP = event.getX() / getWidth();
+                    if(newP < 0) newP = 0; if(newP > 1) newP = 1;
+                    mediaPlayer.seekTo((int)(newP * mediaPlayer.getDuration()));
+                    setProgress(newP);
                     return true;
                 }
                 return false;
@@ -488,7 +658,7 @@ public class OfflinePlayerManager {
 
         public void setProgress(float p) {
             this.progress = p;
-            invalidate(); // Redraw
+            invalidate();
         }
 
         @Override
@@ -496,17 +666,23 @@ public class OfflinePlayerManager {
             super.onDraw(canvas);
             int width = getWidth();
             int height = getHeight();
-            int bars = 40; // Number of heartbeat lines
+            int bars = 45; // Bars matching the image density
             float spacing = width / (float) bars;
             int centerY = height / 2;
 
             for (int i = 0; i < bars; i++) {
                 float x = i * spacing + (spacing / 2);
-                // Create random-looking heights for waveform effect
-                float barHeight = (float) (10 + Math.abs(Math.sin(i * 0.5)) * (height - 20));
+                // Creating the realistic audio wave look (center is thicker, edges are random)
+                float baseH = (i % 2 == 0) ? 15f : 30f;
+                float barHeight = (float) (baseH + Math.abs(Math.sin(i * 0.4)) * (height - 30));
                 
                 Paint p = (x / width <= progress) ? paintPlayed : paintUnplayed;
                 canvas.drawLine(x, centerY - barHeight / 2, x, centerY + barHeight / 2, p);
+                
+                // Draw thumb indicator
+                if (Math.abs((x / width) - progress) < 0.02f) {
+                    canvas.drawLine(x, centerY - (barHeight/2) - 10, x, centerY + (barHeight/2) + 10, paintThumb);
+                }
             }
         }
     }
