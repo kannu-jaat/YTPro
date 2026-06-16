@@ -25,7 +25,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
-import android.widget.Button; // 🛠️ FIX 1: Missing Import Added
+import android.widget.Button; 
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -64,7 +64,6 @@ public class OfflinePlayerManager {
     private WaveformSeekBar waveformSeekBar;
     private Handler progressHandler = new Handler(Looper.getMainLooper());
 
-    // 🛠️ FIX 2: Renamed back to DJDeckListener
     private DJDeckListener deckListener;
 
     public interface DJDeckListener {
@@ -119,7 +118,9 @@ public class OfflinePlayerManager {
         LinearLayout.LayoutParams tParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
         header.addView(titleBox, tParams);
 
+        // 🛠️ FIX: Strict Layout Params for Settings Icon
         DrawnIconBtn btnSettings = new DrawnIconBtn(context, "settings", "#FFFFFF");
+        btnSettings.setLayoutParams(new LinearLayout.LayoutParams(90, 90)); // Size constrained
         btnSettings.setOnClickListener(v -> openSettingsDialog());
         header.addView(btnSettings);
 
@@ -136,7 +137,10 @@ public class OfflinePlayerManager {
         sParams.setMargins(0, 40, 0, 40);
         searchBox.setLayoutParams(sParams);
 
+        // 🛠️ FIX: Strict Layout Params for Search & Filter Icons
         DrawnIconBtn searchIcon = new DrawnIconBtn(context, "search", "#888888");
+        searchIcon.setLayoutParams(new LinearLayout.LayoutParams(60, 60));
+
         EditText etSearch = new EditText(context);
         etSearch.setHint("Search audio...");
         etSearch.setHintTextColor(Color.parseColor("#888888"));
@@ -149,6 +153,7 @@ public class OfflinePlayerManager {
         etParams.setMargins(20, 0, 20, 0);
 
         DrawnIconBtn filterIcon = new DrawnIconBtn(context, "filter", "#CCFF00");
+        filterIcon.setLayoutParams(new LinearLayout.LayoutParams(60, 60));
 
         searchBox.addView(searchIcon);
         searchBox.addView(etSearch, etParams);
@@ -192,7 +197,8 @@ public class OfflinePlayerManager {
         verticalLayout.addView(header);
         verticalLayout.addView(searchBox);
         verticalLayout.addView(sortHeader);
-        verticalLayout.addView(listView, new LinearLayout.LayoutParams(-1, -1));
+        // 🛠️ FIX: height = 0, weight = 1.0f. Ye ensure karega ki ListView bachi hui saari space le, icons ko bahar na feke
+        verticalLayout.addView(listView, new LinearLayout.LayoutParams(-1, 0, 1.0f)); 
         
         // --- WAVY MINI PLAYER ---
         setupWavyMiniPlayer();
@@ -238,7 +244,9 @@ public class OfflinePlayerManager {
         textLayout.addView(mpTitle);
         textLayout.addView(mpArtist);
         
+        // 🛠️ FIX: Strict Layout Params for EQ Icon
         DrawnIconBtn eqIcon = new DrawnIconBtn(context, "eq", "#CCFF00");
+        eqIcon.setLayoutParams(new LinearLayout.LayoutParams(80, 80));
 
         infoRow.addView(artBox);
         infoRow.addView(textLayout, new LinearLayout.LayoutParams(0, -2, 1.0f));
@@ -506,7 +514,6 @@ public class OfflinePlayerManager {
             }).show();
     }
 
-    // 🛠️ FIX 3: Updated to match MainActivity Deck Listener Names
     private void openTrackMenu(AudioTrack track) {
         String[] options = {"🎧 Load to Deck A (Left)", "🎛️ Load to Deck B (Right)", "🚫 Block this Audio", "📁 Block entire Folder: " + track.folder};
         new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
