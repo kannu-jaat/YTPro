@@ -255,14 +255,23 @@ public class MainActivity extends Activity {
 
         ytWrapper.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
 
-        // 🎵 Initialize Offline Player
-        offlinePlayer = new OfflinePlayerManager(this, contentContainer, new OfflinePlayerManager.DJDeckListener() {
+        // 🎵 Initialize the Premium Offline Player
+        offlinePlayer = new OfflinePlayerManager(this, contentContainer, new OfflinePlayerManager.LocalDeckBridge() {
             @Override
-            public void onLoadToDeck(String deck, Uri fileUri) {
-                String inputId = "left".equals(deck) ? "leftUrl" : "rightUrl";
-                String js = "var el = document.getElementById('" + inputId + "'); " +
-                            "if(el) { el.value = '" + fileUri.toString() + "'; el.dispatchEvent(new Event('input', { bubbles: true })); }";
-                web.evaluateJavascript(js, null);
+            public void loadToLocalDeck(String deck, Uri fileUri) {
+                // "A" (Left) ya "B" (Right)
+                // Assuming netlify uses BinaryStreamManager or similar for local audio injection.
+                // Yahan aap apna JS logic run kara sakte hain jo Local Deck A & B ko handle karta hai.
+                if (streamManager != null) {
+                    streamManager.loadLocalUri(deck, fileUri); // Example usage
+                } else {
+                    Toast.makeText(MainActivity.this, "Connecting to Local Deck " + deck, Toast.LENGTH_SHORT).show();
+                    // Agar koi input field hai toh ye chalao:
+                    String inputId = deck.equals("A") ? "leftDeckInput" : "rightDeckInput";
+                    String js = "var el = document.getElementById('" + inputId + "'); " +
+                                "if(el) { el.setAttribute('data-uri', '" + fileUri.toString() + "'); el.dispatchEvent(new Event('change')); }";
+                    web.evaluateJavascript(js, null);
+                }
             }
         });
 
