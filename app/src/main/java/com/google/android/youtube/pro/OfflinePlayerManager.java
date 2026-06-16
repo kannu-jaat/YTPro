@@ -8,10 +8,12 @@ import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.drawable.GradientDrawable;
+import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
@@ -19,19 +21,19 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
-import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -48,452 +50,570 @@ public class OfflinePlayerManager {
     private FrameLayout parentContainer;
     private FrameLayout mainUI;
     private ListView listView;
-    private LinearLayout miniPlayer;
+    private WavyMiniPlayer miniPlayer;
     private SharedPreferences prefs;
 
+    // Media & Data
     private MediaPlayer mediaPlayer;
-    private ArrayList<AudioTrack> allTracks;
-    private ArrayList<AudioTrack> filteredTracks;
-    private CustomAudioAdapter adapter;
+    private ArrayList<AudioTrack> allTracksList;
+    private ArrayList<AudioTrack> displayList;
+    private ArrayAdapter<AudioTrack> adapter;
     private int currentTrackIndex = -1;
     private boolean isPlaying = false;
+    private String currentSortMode = "Recent"; // "Recent", "Name", "Duration"
 
-    // UI Elements
-    private TextView mpTitle, mpArtist, mpCurrTime, mpTotalTime, sortText;
-    private Button mpPlayPauseBtn;
-    private WaveSeekBar waveSeekBar;
-    private Handler handler = new Handler(Looper.getMainLooper());
+    // Mini Player UI
+    private TextView mpTitle, mpArtist, tvCurrentTime, tvTotalTime;
+    private DrawnIconBtn btnPlayPause;
+    private WaveformSeekBar waveformSeekBar;
+    private Handler progressHandler = new Handler(Looper.getMainLooper());
 
-    private DJDeckListener deckListener;
-    private String currentSort = "Date Added"; 
+    private LocalDeckBridge deckListener;
 
-    public interface DJDeckListener {
-        void onLoadToDeck(String deck, Uri fileUri);
+    // Interface for Netlify Local Deck A/B
+    public interface LocalDeckBridge {
+        void loadToLocalDeck(String deck, Uri fileUri);
     }
 
     static class AudioTrack {
-        long id; String title; String artist; String path; String folder; Uri uri; long duration; long albumId; long dateAdded;
-        AudioTrack(long id, String t, String a, String p, String f, Uri u, long d, long al, long da) {
-            this.id = id; title = t; artist = a; path = p; folder = f; uri = u; duration = d; albumId = al; dateAdded = da;
-        }
-        public String getDurationStr() {
-            long min = (duration / 1000) / 60; long sec = (duration / 1000) % 60;
-            return String.format(Locale.US, "%d:%02d", min, sec);
+        long id; String title; String artist; String path; String folder; Uri uri; long duration;
+        AudioTrack(long id, String t, String a, String p, String f, Uri u, long d) {
+            this.id = id; title = t; artist = a; path = p; folder = f; uri = u; duration = d;
         }
     }
 
-    public OfflinePlayerManager(Context context, FrameLayout parentContainer, DJDeckListener listener) {
+    public OfflinePlayerManager(Context context, FrameLayout parentContainer, LocalDeckBridge listener) {
         this.context = context;
         this.parentContainer = parentContainer;
         this.deckListener = listener;
-        this.prefs = context.getSharedPreferences("DJ_OFFLINE_PREFS", Context.MODE_PRIVATE);
-        this.allTracks = new ArrayList<>();
-        this.filteredTracks = new ArrayList<>();
+        this.prefs = context.getSharedPreferences("LITE_PLAYER_PREFS", Context.MODE_PRIVATE);
+        this.allTracksList = new ArrayList<>();
+        this.displayList = new ArrayList<>();
         initUI();
     }
 
-    // ================= UI ENGINE =================
     private void initUI() {
         mainUI = new FrameLayout(context);
         mainUI.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
-        mainUI.setBackgroundColor(android.graphics.Color.parseColor("#060906")); // Pure Dark UI
+        mainUI.setBackgroundColor(Color.parseColor("#050505")); // Pure dark background
         mainUI.setVisibility(View.GONE);
 
         LinearLayout verticalLayout = new LinearLayout(context);
         verticalLayout.setOrientation(LinearLayout.VERTICAL);
         verticalLayout.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
+        verticalLayout.setPadding(30, 40, 30, 0);
 
-        // 1. HEADER ROW
+        // --- TOP HEADER ---
         LinearLayout header = new LinearLayout(context);
         header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setPadding(40, 50, 40, 20);
         header.setGravity(Gravity.CENTER_VERTICAL);
         
+        // App Logo & Name
         LinearLayout titleBox = new LinearLayout(context);
         titleBox.setOrientation(LinearLayout.VERTICAL);
-        TextView mainTitle = new TextView(context);
-        mainTitle.setText("Lite Player"); mainTitle.setTextColor(android.graphics.Color.WHITE);
-        mainTitle.setTextSize(24f); mainTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        TextView title = new TextView(context);
+        title.setText("Lite Player");
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(22f);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
         TextView subTitle = new TextView(context);
-        subTitle.setText("Feel the music"); subTitle.setTextColor(android.graphics.Color.GRAY); subTitle.setTextSize(12f);
-        titleBox.addView(mainTitle); titleBox.addView(subTitle);
+        subTitle.setText("Feel the music");
+        subTitle.setTextColor(Color.parseColor("#888888"));
+        subTitle.setTextSize(12f);
+        titleBox.addView(title); titleBox.addView(subTitle);
         LinearLayout.LayoutParams tParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
         header.addView(titleBox, tParams);
 
-        Button btnSettings = createIconBtn("⚙️");
+        // Settings Icon (Real drawn gear)
+        DrawnIconBtn btnSettings = new DrawnIconBtn(context, "settings", "#FFFFFF");
         btnSettings.setOnClickListener(v -> openSettingsDialog());
         header.addView(btnSettings);
 
-        // 2. LIVE SEARCH BAR
+        // --- SEARCH BAR ---
         LinearLayout searchBox = new LinearLayout(context);
         searchBox.setOrientation(LinearLayout.HORIZONTAL);
         searchBox.setGravity(Gravity.CENTER_VERTICAL);
+        GradientDrawable searchBg = new GradientDrawable();
+        searchBg.setColor(Color.parseColor("#151515"));
+        searchBg.setCornerRadius(50f);
+        searchBox.setBackground(searchBg);
+        searchBox.setPadding(30, 10, 30, 10);
         LinearLayout.LayoutParams sParams = new LinearLayout.LayoutParams(-1, 120);
-        sParams.setMargins(40, 20, 40, 20);
+        sParams.setMargins(0, 40, 0, 40);
         searchBox.setLayoutParams(sParams);
-        GradientDrawable sBg = new GradientDrawable();
-        sBg.setColor(android.graphics.Color.parseColor("#151815"));
-        sBg.setCornerRadius(60f);
-        searchBox.setBackground(sBg);
-        searchBox.setPadding(30, 0, 30, 0);
 
-        TextView searchIcon = new TextView(context); searchIcon.setText("🔍 "); searchIcon.setTextSize(16f);
+        DrawnIconBtn searchIcon = new DrawnIconBtn(context, "search", "#888888");
         EditText etSearch = new EditText(context);
-        etSearch.setHint("Search audio..."); etSearch.setHintTextColor(android.graphics.Color.GRAY);
-        etSearch.setTextColor(android.graphics.Color.WHITE); etSearch.setBackgroundColor(android.graphics.Color.TRANSPARENT);
-        etSearch.setSingleLine(true);
+        etSearch.setHint("Search audio...");
+        etSearch.setHintTextColor(Color.parseColor("#888888"));
+        etSearch.setTextColor(Color.WHITE);
+        etSearch.setBackgroundColor(Color.TRANSPARENT);
+        etSearch.setTextSize(16f);
+        etSearch.setMaxLines(1);
+        etSearch.setInputType(InputType.TYPE_CLASS_TEXT);
         LinearLayout.LayoutParams etParams = new LinearLayout.LayoutParams(0, -1, 1.0f);
-        
+        etParams.setMargins(20, 0, 20, 0);
+
+        DrawnIconBtn filterIcon = new DrawnIconBtn(context, "filter", "#CCFF00"); // Neon Yellowish Green
+
+        searchBox.addView(searchIcon);
+        searchBox.addView(etSearch, etParams);
+        searchBox.addView(filterIcon);
+
+        // Live Search Logic
         etSearch.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
-            @Override public void onTextChanged(CharSequence s, int st, int b, int c) { filterList(s.toString()); }
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { filterTracks(s.toString()); }
             @Override public void afterTextChanged(Editable s) {}
         });
 
-        Button btnFilter = createIconBtn("🎛️");
-        btnFilter.setTextColor(android.graphics.Color.parseColor("#A2F42B"));
-        btnFilter.setOnClickListener(v -> manageBlockedItems());
+        // --- SORTING HEADER ---
+        LinearLayout sortHeader = new LinearLayout(context);
+        sortHeader.setOrientation(LinearLayout.HORIZONTAL);
+        sortHeader.setGravity(Gravity.CENTER_VERTICAL);
+        sortHeader.setPadding(0, 0, 0, 20);
 
-        searchBox.addView(searchIcon); searchBox.addView(etSearch, etParams); searchBox.addView(btnFilter);
-
-        // 3. SORTING ROW
-        LinearLayout sortRow = new LinearLayout(context);
-        sortRow.setOrientation(LinearLayout.HORIZONTAL);
-        sortRow.setPadding(40, 20, 40, 20);
         TextView allAudioTxt = new TextView(context);
-        allAudioTxt.setText("All Audio"); allAudioTxt.setTextColor(android.graphics.Color.WHITE);
-        allAudioTxt.setTextSize(16f); allAudioTxt.setTypeface(null, android.graphics.Typeface.BOLD);
+        allAudioTxt.setText("All Audio");
+        allAudioTxt.setTextColor(Color.WHITE);
+        allAudioTxt.setTextSize(18f);
+        allAudioTxt.setTypeface(null, android.graphics.Typeface.BOLD);
         
-        sortText = new TextView(context);
-        sortText.setText(currentSort + " ∨"); sortText.setTextColor(android.graphics.Color.parseColor("#A2F42B"));
-        sortText.setTextSize(14f); sortText.setGravity(Gravity.RIGHT);
-        sortText.setOnClickListener(v -> openSortMenu(sortText));
+        TextView sortTxt = new TextView(context);
+        sortTxt.setText("Recently Added ˅");
+        sortTxt.setTextColor(Color.parseColor("#CCFF00"));
+        sortTxt.setTextSize(14f);
+        sortTxt.setGravity(Gravity.RIGHT);
+        sortTxt.setOnClickListener(v -> openSortDialog(sortTxt));
+        
+        sortHeader.addView(allAudioTxt, new LinearLayout.LayoutParams(0, -2, 1.0f));
+        sortHeader.addView(sortTxt);
 
-        LinearLayout.LayoutParams srParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
-        sortRow.addView(allAudioTxt, srParams); sortRow.addView(sortText);
-
-        // 4. LISTVIEW
+        // --- LIST VIEW ---
         listView = new ListView(context);
         listView.setDivider(null);
-        listView.setPadding(40, 0, 40, 300); 
         listView.setClipToPadding(false);
-        adapter = new CustomAudioAdapter();
-        listView.setAdapter(adapter);
-        LinearLayout.LayoutParams lParams = new LinearLayout.LayoutParams(-1, 0, 1.0f);
-
-        // 5. MINI PLAYER
-        setupMiniPlayer();
+        listView.setPadding(0, 0, 0, 350); // Extra padding for wavy mini player
+        setupListViewAdapter();
 
         verticalLayout.addView(header);
         verticalLayout.addView(searchBox);
-        verticalLayout.addView(sortRow);
-        verticalLayout.addView(listView, lParams);
+        verticalLayout.addView(sortHeader);
+        verticalLayout.addView(listView, new LinearLayout.LayoutParams(-1, -1));
         
+        // --- WAVY MINI PLAYER ---
+        setupWavyMiniPlayer();
+
         mainUI.addView(verticalLayout);
-        mainUI.addView(miniPlayer); 
+        mainUI.addView(miniPlayer);
         parentContainer.addView(mainUI);
     }
 
-    private Button createIconBtn(String icon) {
-        Button b = new Button(context); b.setText(icon); b.setBackgroundColor(android.graphics.Color.TRANSPARENT);
-        b.setTextSize(20f); b.setLayoutParams(new LinearLayout.LayoutParams(100, 100));
-        return b;
-    }
-
-    // ================= MINI PLAYER ENGINE =================
-    private void setupMiniPlayer() {
-        miniPlayer = new LinearLayout(context);
-        miniPlayer.setOrientation(LinearLayout.VERTICAL);
-        FrameLayout.LayoutParams mParams = new FrameLayout.LayoutParams(-1, -2);
-        mParams.gravity = Gravity.BOTTOM; mParams.setMargins(20, 0, 20, 20);
+    private void setupWavyMiniPlayer() {
+        miniPlayer = new WavyMiniPlayer(context);
+        FrameLayout.LayoutParams mParams = new FrameLayout.LayoutParams(-1, 320); // Taller for the wave
+        mParams.gravity = Gravity.BOTTOM;
         miniPlayer.setLayoutParams(mParams);
+        miniPlayer.setPadding(40, 60, 40, 30); // Top padding accounts for wave
 
-        // Neon Glow Glassmorphic Shape
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(android.graphics.Color.parseColor("#1A1F1A")); // Semi-dark green tint
-        bg.setCornerRadius(50f);
-        bg.setStroke(3, android.graphics.Color.parseColor("#A2F42B")); // Neon Green Glow
-        miniPlayer.setBackground(bg);
-        miniPlayer.setPadding(30, 30, 30, 30);
-        miniPlayer.setElevation(20f);
+        LinearLayout vBox = new LinearLayout(context);
+        vBox.setOrientation(LinearLayout.VERTICAL);
 
-        // Top Row: Info & Visualizer
+        // Top Row: Info & EQ
         LinearLayout infoRow = new LinearLayout(context);
         infoRow.setOrientation(LinearLayout.HORIZONTAL);
         infoRow.setGravity(Gravity.CENTER_VERTICAL);
         
-        // Mock Cover Art in Mini Player
-        TextView mockArt = new TextView(context);
-        mockArt.setBackgroundColor(android.graphics.Color.parseColor("#252A25"));
-        mockArt.setText("🎵"); mockArt.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams artP = new LinearLayout.LayoutParams(100, 100);
-        artP.setMargins(0,0,20,0);
-        mockArt.setLayoutParams(artP);
+        // Custom Album Art Box
+        FrameLayout artBox = new FrameLayout(context);
+        GradientDrawable artBg = new GradientDrawable();
+        artBg.setColor(Color.parseColor("#222222"));
+        artBg.setCornerRadius(20f);
+        artBox.setBackground(artBg);
+        artBox.setLayoutParams(new LinearLayout.LayoutParams(100, 100));
 
-        LinearLayout txtBox = new LinearLayout(context);
-        txtBox.setOrientation(LinearLayout.VERTICAL);
-        mpTitle = new TextView(context); mpTitle.setText("Not Playing"); mpTitle.setTextColor(android.graphics.Color.WHITE); mpTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        mpArtist = new TextView(context); mpArtist.setText("--"); mpArtist.setTextColor(android.graphics.Color.GRAY); mpArtist.setTextSize(12f);
-        txtBox.addView(mpTitle); txtBox.addView(mpArtist);
+        LinearLayout textLayout = new LinearLayout(context);
+        textLayout.setOrientation(LinearLayout.VERTICAL);
+        textLayout.setPadding(30, 0, 0, 0);
+        mpTitle = new TextView(context);
+        mpTitle.setText("Not Playing");
+        mpTitle.setTextColor(Color.WHITE);
+        mpTitle.setTextSize(16f);
+        mpTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        mpArtist = new TextView(context);
+        mpArtist.setText("--");
+        mpArtist.setTextColor(Color.parseColor("#888888"));
+        mpArtist.setTextSize(12f);
+        textLayout.addView(mpTitle);
+        textLayout.addView(mpArtist);
         
-        TextView visualizerIcon = new TextView(context); visualizerIcon.setText("🎛️"); visualizerIcon.setTextSize(24f); visualizerIcon.setGravity(Gravity.RIGHT);
+        DrawnIconBtn eqIcon = new DrawnIconBtn(context, "eq", "#CCFF00");
 
-        infoRow.addView(mockArt); infoRow.addView(txtBox, new LinearLayout.LayoutParams(0, -2, 1.0f)); infoRow.addView(visualizerIcon);
+        infoRow.addView(artBox);
+        infoRow.addView(textLayout, new LinearLayout.LayoutParams(0, -2, 1.0f));
+        infoRow.addView(eqIcon);
 
-        // Wave Seekbar
-        waveSeekBar = new WaveSeekBar(context);
-        LinearLayout.LayoutParams wParams = new LinearLayout.LayoutParams(-1, 80);
-        wParams.setMargins(0, 20, 0, 10);
-        
-        // Timestamps
+        // Middle Row: Waveform Seekbar
+        waveformSeekBar = new WaveformSeekBar(context);
+        LinearLayout.LayoutParams waveParams = new LinearLayout.LayoutParams(-1, 60);
+        waveParams.setMargins(0, 30, 0, 10);
+
+        // Time Row
         LinearLayout timeRow = new LinearLayout(context);
         timeRow.setOrientation(LinearLayout.HORIZONTAL);
-        mpCurrTime = new TextView(context); mpCurrTime.setText("0:00"); mpCurrTime.setTextColor(android.graphics.Color.parseColor("#A2F42B")); mpCurrTime.setTextSize(12f);
-        mpTotalTime = new TextView(context); mpTotalTime.setText("0:00"); mpTotalTime.setTextColor(android.graphics.Color.GRAY); mpTotalTime.setTextSize(12f); mpTotalTime.setGravity(Gravity.RIGHT);
-        timeRow.addView(mpCurrTime, new LinearLayout.LayoutParams(0, -2, 1.0f)); timeRow.addView(mpTotalTime, new LinearLayout.LayoutParams(0, -2, 1.0f));
+        tvCurrentTime = new TextView(context); tvCurrentTime.setText("0:00"); tvCurrentTime.setTextColor(Color.parseColor("#CCFF00")); tvCurrentTime.setTextSize(10f);
+        tvTotalTime = new TextView(context); tvTotalTime.setText("0:00"); tvTotalTime.setTextColor(Color.parseColor("#888888")); tvTotalTime.setTextSize(10f); tvTotalTime.setGravity(Gravity.RIGHT);
+        timeRow.addView(tvCurrentTime, new LinearLayout.LayoutParams(0, -2, 1.0f));
+        timeRow.addView(tvTotalTime, new LinearLayout.LayoutParams(0, -2, 1.0f));
 
-        // Controls
-        LinearLayout controlRow = new LinearLayout(context);
-        controlRow.setOrientation(LinearLayout.HORIZONTAL);
-        controlRow.setGravity(Gravity.CENTER);
-        controlRow.setPadding(0, 20, 0, 0);
+        // Bottom Row: Controls (Real Shapes)
+        LinearLayout controlsRow = new LinearLayout(context);
+        controlsRow.setOrientation(LinearLayout.HORIZONTAL);
+        controlsRow.setGravity(Gravity.CENTER);
+        controlsRow.setPadding(0, 10, 0, 0);
 
-        Button btnShuf = createIconBtn("🔀"); btnShuf.setTextColor(android.graphics.Color.parseColor("#A2F42B"));
-        Button btnPrev = createIconBtn("⏮️"); btnPrev.setOnClickListener(v -> playPrev());
+        DrawnIconBtn btnShuffle = new DrawnIconBtn(context, "shuffle", "#CCFF00");
+        DrawnIconBtn btnPrev = new DrawnIconBtn(context, "prev", "#FFFFFF");
         
-        // Play Button with Circle
-        mpPlayPauseBtn = new Button(context);
-        mpPlayPauseBtn.setText("▶️");
-        GradientDrawable playBg = new GradientDrawable(); playBg.setShape(GradientDrawable.OVAL); playBg.setStroke(4, android.graphics.Color.parseColor("#A2F42B")); playBg.setColor(android.graphics.Color.parseColor("#151815"));
-        mpPlayPauseBtn.setBackground(playBg);
-        mpPlayPauseBtn.setLayoutParams(new LinearLayout.LayoutParams(130, 130));
-        mpPlayPauseBtn.setOnClickListener(v -> togglePlayPause());
+        // Play/Pause with Circle Glow
+        btnPlayPause = new DrawnIconBtn(context, "play", "#CCFF00");
+        btnPlayPause.setDrawCircle(true);
+        btnPlayPause.setOnClickListener(v -> togglePlayPause());
+        
+        DrawnIconBtn btnNext = new DrawnIconBtn(context, "next", "#FFFFFF");
+        DrawnIconBtn btnRepeat = new DrawnIconBtn(context, "repeat", "#CCFF00");
 
-        Button btnNext = createIconBtn("⏭️"); btnNext.setOnClickListener(v -> playNext());
-        Button btnRep = createIconBtn("🔁"); btnRep.setTextColor(android.graphics.Color.parseColor("#A2F42B"));
+        btnPrev.setOnClickListener(v -> playPrev());
+        btnNext.setOnClickListener(v -> playNext());
 
-        controlRow.addView(btnShuf); controlRow.addView(btnPrev); controlRow.addView(mpPlayPauseBtn); controlRow.addView(btnNext); controlRow.addView(btnRep);
+        LinearLayout.LayoutParams cParams = new LinearLayout.LayoutParams(0, 100, 1.0f);
+        controlsRow.addView(btnShuffle, cParams);
+        controlsRow.addView(btnPrev, cParams);
+        controlsRow.addView(btnPlayPause, new LinearLayout.LayoutParams(140, 140)); // Bigger center button
+        controlsRow.addView(btnNext, cParams);
+        controlsRow.addView(btnRepeat, cParams);
 
-        miniPlayer.addView(infoRow);
-        miniPlayer.addView(waveSeekBar, wParams);
-        miniPlayer.addView(timeRow);
-        miniPlayer.addView(controlRow);
+        vBox.addView(infoRow);
+        vBox.addView(waveformSeekBar, waveParams);
+        vBox.addView(timeRow);
+        vBox.addView(controlsRow);
+        
+        miniPlayer.addView(vBox);
     }
+
+    private void setupListViewAdapter() {
+        adapter = new ArrayAdapter<AudioTrack>(context, 0, displayList) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                LinearLayout row;
+                if (convertView == null) {
+                    row = new LinearLayout(context);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    row.setGravity(Gravity.CENTER_VERTICAL);
+                    
+                    GradientDrawable bg = new GradientDrawable();
+                    bg.setColor(Color.parseColor("#111111")); // Dark rounded rect
+                    bg.setCornerRadius(40f);
+                    row.setBackground(bg);
+                    row.setPadding(30, 20, 20, 20);
+                    
+                    LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
+                    rp.setMargins(0, 0, 0, 25);
+                    row.setLayoutParams(rp);
+
+                    // Art Box
+                    FrameLayout artBox = new FrameLayout(context);
+                    GradientDrawable artBg = new GradientDrawable();
+                    artBg.setColor(Color.parseColor("#222222"));
+                    artBg.setCornerRadius(20f);
+                    artBox.setBackground(artBg);
+                    artBox.setLayoutParams(new LinearLayout.LayoutParams(110, 110));
+
+                    // Text Info
+                    LinearLayout txtBox = new LinearLayout(context);
+                    txtBox.setOrientation(LinearLayout.VERTICAL);
+                    txtBox.setPadding(30, 0, 10, 0);
+                    
+                    TextView tName = new TextView(context);
+                    tName.setId(View.generateViewId());
+                    tName.setTextColor(Color.WHITE);
+                    tName.setTextSize(15f);
+                    tName.setMaxLines(1);
+                    tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    
+                    TextView tArtist = new TextView(context);
+                    tArtist.setId(View.generateViewId());
+                    tArtist.setTextColor(Color.parseColor("#888888"));
+                    tArtist.setTextSize(12f);
+                    tArtist.setMaxLines(1);
+                    
+                    txtBox.addView(tName);
+                    txtBox.addView(tArtist);
+
+                    // Duration
+                    TextView tDur = new TextView(context);
+                    tDur.setId(View.generateViewId());
+                    tDur.setTextColor(Color.parseColor("#888888"));
+                    tDur.setTextSize(12f);
+                    
+                    // 3 Dots (Real Canvas Drawn)
+                    DrawnIconBtn btnDots = new DrawnIconBtn(context, "dots", "#FFFFFF");
+                    btnDots.setLayoutParams(new LinearLayout.LayoutParams(80, 80));
+
+                    row.addView(artBox);
+                    row.addView(txtBox, new LinearLayout.LayoutParams(0, -2, 1.0f));
+                    row.addView(tDur);
+                    row.addView(btnDots);
+                    
+                    row.setTag(new View[]{tName, tArtist, tDur, btnDots});
+                } else {
+                    row = (LinearLayout) convertView;
+                }
+
+                View[] views = (View[]) row.getTag();
+                TextView tName = (TextView) views[0];
+                TextView tArtist = (TextView) views[1];
+                TextView tDur = (TextView) views[2];
+                DrawnIconBtn btnDots = (DrawnIconBtn) views[3];
+
+                AudioTrack track = getItem(position);
+                tName.setText(track.title);
+                tArtist.setText(track.artist != null ? track.artist : track.folder);
+                tDur.setText(formatTime(track.duration));
+
+                row.setOnClickListener(v -> playTrack(track));
+                btnDots.setOnClickListener(v -> openTrackMenu(track));
+
+                return row;
+            }
+        };
+        listView.setAdapter(adapter);
+    }
+
+    // --- LOGIC FUNCTIONS ---
 
     public void toggleVisibility() {
-        if (mainUI.getVisibility() == View.VISIBLE) mainUI.setVisibility(View.GONE);
-        else { mainUI.setVisibility(View.VISIBLE); loadAudioData(); }
+        if (mainUI.getVisibility() == View.VISIBLE) {
+            mainUI.setVisibility(View.GONE);
+        } else {
+            mainUI.setVisibility(View.VISIBLE);
+            loadAudioFiles(); 
+        }
     }
 
-    // ================= DATA LOGIC (Search, Sort, Block, Load) =================
-    private void loadAudioData() {
-        allTracks.clear();
-        Set<String> blockedFiles = prefs.getStringSet("BLOCKED_FILES", new HashSet<>());
-        Set<String> blockedFolders = prefs.getStringSet("BLOCKED_FOLDERS", new HashSet<>());
-        int minSecs = prefs.getInt("MIN_AUDIO_SEC", 30); // Default 30s
-        long minMillis = minSecs * 1000L;
-
-        Uri collection = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL) : MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
-        String[] proj = { MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.DATA, MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.ALBUM_ID, MediaStore.Audio.Media.DATE_ADDED };
-        
-        try (Cursor c = context.getContentResolver().query(collection, proj, null, null, null)) {
-            if (c != null && c.moveToFirst()) {
-                do {
-                    long id = c.getLong(0); String title = c.getString(1); String artist = c.getString(2);
-                    String path = c.getString(3); long dur = c.getLong(4); long aId = c.getLong(5); long date = c.getLong(6);
-
-                    if (path != null) {
-                        File f = new File(path);
-                        String folder = f.getParentFile() != null ? f.getParentFile().getName() : "Unknown";
-                        if (title == null || title.trim().isEmpty()) title = f.getName(); // Fallback to filename
-
-                        // 🛡️ BLOCKING LOGIC CHECK
-                        if (dur >= minMillis && !blockedFolders.contains(folder) && !blockedFiles.contains(path)) {
-                            Uri uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id);
-                            allTracks.add(new AudioTrack(id, title, artist, path, folder, uri, dur, aId, date));
-                        }
-                    }
-                } while (c.moveToNext());
-            }
-        } catch (Exception e) {}
-        
-        applySort(currentSort);
-    }
-
-    private void filterList(String query) {
-        filteredTracks.clear();
-        if (query.isEmpty()) filteredTracks.addAll(allTracks);
-        else {
+    private void filterTracks(String query) {
+        displayList.clear();
+        if (query.trim().isEmpty()) {
+            displayList.addAll(allTracksList);
+        } else {
             String q = query.toLowerCase();
-            for (AudioTrack t : allTracks) {
+            for (AudioTrack t : allTracksList) {
                 if (t.title.toLowerCase().contains(q) || (t.artist != null && t.artist.toLowerCase().contains(q))) {
-                    filteredTracks.add(t);
+                    displayList.add(t);
                 }
             }
         }
+        applySorting();
         adapter.notifyDataSetChanged();
     }
 
-    private void openSortMenu(View anchor) {
-        PopupMenu popup = new PopupMenu(context, anchor);
-        popup.getMenu().add("Date Added");
-        popup.getMenu().add("Title (A-Z)");
-        popup.getMenu().add("Duration (Longest)");
-        popup.setOnMenuItemClickListener(item -> {
-            currentSort = item.getTitle().toString();
-            sortText.setText(currentSort + " ∨");
-            applySort(currentSort);
-            return true;
-        });
-        popup.show();
-    }
+    private void loadAudioFiles() {
+        allTracksList.clear();
+        displayList.clear();
+        Set<String> blockedFolders = prefs.getStringSet("BLOCKED_FOLDERS", new HashSet<>());
+        Set<String> blockedAudios = prefs.getStringSet("BLOCKED_AUDIOS", new HashSet<>());
+        int minDuration = prefs.getInt("MIN_DURATION_SEC", 10) * 1000; 
 
-    private void applySort(String type) {
-        if (type.equals("Title (A-Z)")) Collections.sort(allTracks, (a, b) -> a.title.compareToIgnoreCase(b.title));
-        else if (type.equals("Duration (Longest)")) Collections.sort(allTracks, (a, b) -> Long.compare(b.duration, a.duration));
-        else Collections.sort(allTracks, (a, b) -> Long.compare(b.dateAdded, a.dateAdded)); // Date Added (Default)
+        Uri collection = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL) : MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+        String[] proj = { MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.DATA, MediaStore.Audio.Media.DURATION };
         
-        filterList(""); // Update UI
+        try (Cursor cursor = context.getContentResolver().query(collection, proj, null, null, MediaStore.Audio.Media.DATE_ADDED + " DESC")) {
+            if (cursor != null && cursor.moveToFirst()) {
+                do {
+                    long id = cursor.getLong(0);
+                    String title = cursor.getString(1);
+                    String artist = cursor.getString(2);
+                    String path = cursor.getString(3);
+                    long duration = cursor.getLong(4);
+
+                    if (path != null) {
+                        File f = new File(path);
+                        String folderName = f.getParentFile() != null ? f.getParentFile().getName() : "Unknown";
+                        
+                        if (duration >= minDuration && !blockedFolders.contains(folderName) && !blockedAudios.contains(String.valueOf(id))) {
+                            Uri uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id);
+                            AudioTrack t = new AudioTrack(id, title, artist, path, folderName, uri, duration);
+                            allTracksList.add(t);
+                        }
+                    }
+                } while (cursor.moveToNext());
+            }
+        } catch (Exception e) { e.printStackTrace(); }
+
+        displayList.addAll(allTracksList);
+        applySorting();
+        adapter.notifyDataSetChanged();
     }
 
-    // ================= CUSTOM ADAPTER (List Items) =================
-    class CustomAudioAdapter extends ArrayAdapter<AudioTrack> {
-        public CustomAudioAdapter() { super(context, 0, filteredTracks); }
+    // --- SORTING ---
+    private void openSortDialog(TextView sortBtn) {
+        String[] options = {"Recently Added", "Name (A-Z)", "Duration"};
+        new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Sort By")
+            .setItems(options, (d, w) -> {
+                if(w == 0) currentSortMode = "Recent";
+                else if(w == 1) currentSortMode = "Name";
+                else if(w == 2) currentSortMode = "Duration";
+                sortBtn.setText(options[w] + " ˅");
+                applySorting();
+                adapter.notifyDataSetChanged();
+            }).show();
+    }
 
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            LinearLayout row;
-            if (convertView == null) {
-                row = new LinearLayout(context);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                row.setPadding(20, 20, 20, 20);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                GradientDrawable bg = new GradientDrawable(); bg.setColor(android.graphics.Color.parseColor("#151815")); bg.setCornerRadius(30f);
-                row.setBackground(bg);
-                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2); p.setMargins(0, 0, 0, 20); row.setLayoutParams(p);
-
-                // Mock Cover
-                TextView cover = new TextView(context); cover.setText("🎵"); cover.setBackgroundColor(android.graphics.Color.parseColor("#252A25")); cover.setGravity(Gravity.CENTER);
-                LinearLayout.LayoutParams cvP = new LinearLayout.LayoutParams(120, 120); cvP.setMargins(0,0,20,0); cover.setLayoutParams(cvP);
-
-                // Text Info
-                LinearLayout txtBox = new LinearLayout(context); txtBox.setOrientation(LinearLayout.VERTICAL);
-                TextView title = new TextView(context); title.setTextColor(android.graphics.Color.WHITE); title.setTextSize(16f); title.setMaxLines(1); title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                TextView artist = new TextView(context); artist.setTextColor(android.graphics.Color.GRAY); artist.setTextSize(12f);
-                txtBox.addView(title); txtBox.addView(artist);
-                
-                TextView duration = new TextView(context); duration.setTextColor(android.graphics.Color.GRAY); duration.setTextSize(12f); duration.setGravity(Gravity.RIGHT);
-
-                // 3-Dot Menu
-                TextView menuBtn = new TextView(context); menuBtn.setText("⋮"); menuBtn.setTextColor(android.graphics.Color.WHITE); menuBtn.setTextSize(24f); menuBtn.setPadding(30, 0, 10, 0);
-
-                row.addView(cover); row.addView(txtBox, new LinearLayout.LayoutParams(0, -2, 1.0f)); row.addView(duration); row.addView(menuBtn);
-                row.setTag(new View[]{title, artist, duration, menuBtn});
-            } else { row = (LinearLayout) convertView; }
-
-            View[] views = (View[]) row.getTag();
-            AudioTrack track = getItem(position);
-            ((TextView)views[0]).setText(track.title);
-            ((TextView)views[1]).setText(track.artist != null ? track.artist : track.folder);
-            ((TextView)views[2]).setText(track.getDurationStr());
-
-            row.setOnClickListener(v -> playTrack(track));
-
-            ((TextView)views[3]).setOnClickListener(v -> {
-                PopupMenu pop = new PopupMenu(context, v);
-                pop.getMenu().add("🎧 Load to L Deck");
-                pop.getMenu().add("🎛️ Load to R Deck");
-                pop.getMenu().add("🚫 Block Audio");
-                pop.getMenu().add("📁 Block Folder");
-                pop.setOnMenuItemClickListener(item -> {
-                    String title = item.getTitle().toString();
-                    if(title.contains("L Deck")) { if(deckListener!=null) deckListener.onLoadToDeck("left", track.uri); Toast.makeText(context,"Loaded Left",0).show(); }
-                    else if(title.contains("R Deck")) { if(deckListener!=null) deckListener.onLoadToDeck("right", track.uri); Toast.makeText(context,"Loaded Right",0).show(); }
-                    else if(title.contains("Audio")) blockFile(track.path);
-                    else if(title.contains("Folder")) blockFolder(track.folder);
-                    return true;
-                });
-                pop.show();
-            });
-            return row;
+    private void applySorting() {
+        if (currentSortMode.equals("Name")) {
+            Collections.sort(displayList, (a, b) -> a.title.compareToIgnoreCase(b.title));
+        } else if (currentSortMode.equals("Duration")) {
+            Collections.sort(displayList, (a, b) -> Long.compare(b.duration, a.duration));
+        } else {
+            // Re-load clears and uses default DESC date order
+            Collections.sort(displayList, (a, b) -> Long.compare(b.id, a.id));
         }
     }
 
-    // ================= SETTINGS & BLOCKING =================
+    // --- SETTINGS (Filter & Unblock) ---
     private void openSettingsDialog() {
-        AlertDialog.Builder b = new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert);
-        b.setTitle("⚙️ Settings");
-        LinearLayout l = new LinearLayout(context); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(50,20,50,20);
-        TextView t = new TextView(context); t.setText("Hide audio shorter than (seconds):"); t.setTextColor(android.graphics.Color.WHITE);
-        EditText e = new EditText(context); e.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); e.setTextColor(android.graphics.Color.WHITE);
-        e.setText(String.valueOf(prefs.getInt("MIN_AUDIO_SEC", 30)));
-        l.addView(t); l.addView(e); b.setView(l);
-        b.setPositiveButton("Save", (d,w) -> {
-            try { prefs.edit().putInt("MIN_AUDIO_SEC", Integer.parseInt(e.getText().toString())).apply(); loadAudioData(); Toast.makeText(context, "Saved", 0).show(); } catch (Exception ex){}
-        });
-        b.show();
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(50, 40, 50, 40);
+
+        TextView t1 = new TextView(context); t1.setText("Hide audio shorter than (seconds):"); t1.setTextColor(Color.WHITE);
+        EditText etMin = new EditText(context);
+        etMin.setInputType(InputType.TYPE_CLASS_NUMBER);
+        etMin.setText(String.valueOf(prefs.getInt("MIN_DURATION_SEC", 10)));
+        etMin.setTextColor(Color.parseColor("#CCFF00"));
+        
+        Button btnUnblockFolder = new Button(context); btnUnblockFolder.setText("Manage Blocked Folders");
+        btnUnblockFolder.setOnClickListener(v -> unblockItem("BLOCKED_FOLDERS", "Folders"));
+        
+        Button btnUnblockAudio = new Button(context); btnUnblockAudio.setText("Manage Blocked Audios");
+        btnUnblockAudio.setOnClickListener(v -> unblockItem("BLOCKED_AUDIOS", "Audios"));
+
+        layout.addView(t1); layout.addView(etMin); layout.addView(btnUnblockFolder); layout.addView(btnUnblockAudio);
+
+        new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("⚙️ Settings")
+            .setView(layout)
+            .setPositiveButton("Save", (d, w) -> {
+                try {
+                    int sec = Integer.parseInt(etMin.getText().toString());
+                    prefs.edit().putInt("MIN_DURATION_SEC", sec).apply();
+                    loadAudioFiles();
+                } catch(Exception e){}
+            }).show();
     }
 
-    private void blockFile(String path) {
-        Set<String> files = new HashSet<>(prefs.getStringSet("BLOCKED_FILES", new HashSet<>()));
-        files.add(path); prefs.edit().putStringSet("BLOCKED_FILES", files).apply(); loadAudioData(); Toast.makeText(context, "Audio Blocked", 0).show();
-    }
-    private void blockFolder(String folder) {
-        Set<String> folders = new HashSet<>(prefs.getStringSet("BLOCKED_FOLDERS", new HashSet<>()));
-        folders.add(folder); prefs.edit().putStringSet("BLOCKED_FOLDERS", folders).apply(); loadAudioData(); Toast.makeText(context, "Folder Blocked", 0).show();
-    }
-    private void manageBlockedItems() {
-        Toast.makeText(context, "Clearing all Blocks for now!", Toast.LENGTH_SHORT).show();
-        prefs.edit().putStringSet("BLOCKED_FILES", new HashSet<>()).putStringSet("BLOCKED_FOLDERS", new HashSet<>()).apply();
-        loadAudioData();
+    private void unblockItem(String prefKey, String title) {
+        Set<String> blocked = prefs.getStringSet(prefKey, new HashSet<>());
+        if(blocked.isEmpty()){ Toast.makeText(context, "Nothing blocked here.", Toast.LENGTH_SHORT).show(); return; }
+        String[] items = blocked.toArray(new String[0]);
+        new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Unblock " + title)
+            .setItems(items, (d, w) -> {
+                Set<String> updated = new HashSet<>(blocked);
+                updated.remove(items[w]);
+                prefs.edit().putStringSet(prefKey, updated).apply();
+                loadAudioFiles();
+                Toast.makeText(context, "Unblocked!", Toast.LENGTH_SHORT).show();
+            }).show();
     }
 
-    // ================= AUDIO PLAYER ENGINE =================
+    // --- 3 DOTS MENU (Netlify Local Deck Load & Block) ---
+    private void openTrackMenu(AudioTrack track) {
+        String[] options = {"🎧 Load to Deck A (Left)", "🎛️ Load to Deck B (Right)", "🚫 Block this Audio", "📁 Block entire Folder: " + track.folder};
+        new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(track.title)
+            .setItems(options, (d, w) -> {
+                if (w == 0) {
+                    if(deckListener != null) deckListener.loadToLocalDeck("A", track.uri);
+                    Toast.makeText(context, "Loaded to Netlify Deck A", Toast.LENGTH_SHORT).show();
+                } else if (w == 1) {
+                    if(deckListener != null) deckListener.loadToLocalDeck("B", track.uri);
+                    Toast.makeText(context, "Loaded to Netlify Deck B", Toast.LENGTH_SHORT).show();
+                } else if (w == 2) {
+                    Set<String> b = new HashSet<>(prefs.getStringSet("BLOCKED_AUDIOS", new HashSet<>()));
+                    b.add(String.valueOf(track.id));
+                    prefs.edit().putStringSet("BLOCKED_AUDIOS", b).apply();
+                    loadAudioFiles();
+                } else if (w == 3) {
+                    Set<String> b = new HashSet<>(prefs.getStringSet("BLOCKED_FOLDERS", new HashSet<>()));
+                    b.add(track.folder);
+                    prefs.edit().putStringSet("BLOCKED_FOLDERS", b).apply();
+                    loadAudioFiles();
+                }
+            }).show();
+    }
+
+    // --- MEDIA PLAYER ENGINE ---
     private void playTrack(AudioTrack track) {
-        currentTrackIndex = filteredTracks.indexOf(track);
+        currentTrackIndex = displayList.indexOf(track);
         if (mediaPlayer == null) {
             mediaPlayer = new MediaPlayer();
-            mediaPlayer.setOnCompletionListener(mp -> playNext()); // AUTO-NEXT
-        } else mediaPlayer.reset();
-
+            mediaPlayer.setOnCompletionListener(mp -> playNext()); // Auto-Next
+        } else {
+            mediaPlayer.reset();
+        }
         try {
             mediaPlayer.setDataSource(context, track.uri);
-            mediaPlayer.prepare(); mediaPlayer.start();
+            mediaPlayer.prepare();
+            mediaPlayer.start();
             isPlaying = true;
-            mpPlayPauseBtn.setText("⏸️"); mpTitle.setText(track.title); mpArtist.setText(track.artist != null ? track.artist : track.folder);
-            mpTotalTime.setText(track.getDurationStr());
-            startWaveUpdater();
-        } catch (Exception e) {}
+            btnPlayPause.setIcon("pause"); // Real pause shape
+            mpTitle.setText(track.title);
+            mpArtist.setText(track.artist != null ? track.artist : "Unknown");
+            tvTotalTime.setText(formatTime(track.duration));
+            startProgressUpdater();
+        } catch (Exception e) { e.printStackTrace(); }
     }
 
     private void togglePlayPause() {
         if (mediaPlayer == null) return;
-        if (mediaPlayer.isPlaying()) { mediaPlayer.pause(); isPlaying = false; mpPlayPauseBtn.setText("▶️"); } 
-        else { mediaPlayer.start(); isPlaying = true; mpPlayPauseBtn.setText("⏸️"); startWaveUpdater(); }
+        if (mediaPlayer.isPlaying()) {
+            mediaPlayer.pause();
+            isPlaying = false;
+            btnPlayPause.setIcon("play");
+        } else {
+            mediaPlayer.start();
+            isPlaying = true;
+            btnPlayPause.setIcon("pause");
+            startProgressUpdater();
+        }
     }
 
     private void playNext() {
-        if (filteredTracks.isEmpty()) return;
-        int next = currentTrackIndex + 1; if (next >= filteredTracks.size()) next = 0;
-        playTrack(filteredTracks.get(next));
+        if (displayList.isEmpty()) return;
+        int next = currentTrackIndex + 1;
+        if (next >= displayList.size()) next = 0;
+        playTrack(displayList.get(next));
     }
 
     private void playPrev() {
-        if (filteredTracks.isEmpty()) return;
-        int prev = currentTrackIndex - 1; if (prev < 0) prev = filteredTracks.size() - 1;
-        playTrack(filteredTracks.get(prev));
+        if (displayList.isEmpty()) return;
+        int prev = currentTrackIndex - 1;
+        if (prev < 0) prev = displayList.size() - 1;
+        playTrack(displayList.get(prev));
     }
 
-    private void startWaveUpdater() {
-        handler.post(new Runnable() {
-            @Override public void run() {
+    private void startProgressUpdater() {
+        progressHandler.post(new Runnable() {
+            @Override
+            public void run() {
                 if (mediaPlayer != null && isPlaying) {
-                    float prog = (float) mediaPlayer.getCurrentPosition() / mediaPlayer.getDuration();
-                    waveSeekBar.setProgress(prog);
-                    
-                    long m = (mediaPlayer.getCurrentPosition() / 1000) / 60; long s = (mediaPlayer.getCurrentPosition() / 1000) % 60;
-                    mpCurrTime.setText(String.format(Locale.US, "%d:%02d", m, s));
-                    handler.postDelayed(this, 100);
+                    int curr = mediaPlayer.getCurrentPosition();
+                    tvCurrentTime.setText(formatTime(curr));
+                    float progress = (float) curr / mediaPlayer.getDuration();
+                    waveformSeekBar.setProgress(progress);
+                    progressHandler.postDelayed(this, 100); 
                 }
             }
         });
@@ -501,41 +621,191 @@ public class OfflinePlayerManager {
 
     public void onDestroy() {
         if (mediaPlayer != null) { mediaPlayer.release(); mediaPlayer = null; }
-        handler.removeCallbacksAndMessages(null);
+        progressHandler.removeCallbacksAndMessages(null);
     }
 
-    // ================= REAL WAVE SEEKBAR (Sci-Fi Look) =================
-    class WaveSeekBar extends View {
+    private String formatTime(long ms) {
+        long sec = (ms / 1000) % 60;
+        long min = (ms / 1000) / 60;
+        return String.format(Locale.US, "%d:%02d", min, sec);
+    }
+
+    // ==========================================
+    // 🎨 CUSTOM DRAWN CLASSES (NO XML, NO ASSETS)
+    // ==========================================
+
+    // 🌊 1. Wavy Mini Player Background
+    class WavyMiniPlayer extends FrameLayout {
+        private Paint paint, strokePaint;
+        private Path path;
+
+        public WavyMiniPlayer(Context context) {
+            super(context);
+            setWillNotDraw(false);
+            paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paint.setColor(Color.parseColor("#151515")); // Dark Glass
+            paint.setAlpha(240); // Slight transparency
+
+            strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            strokePaint.setColor(Color.parseColor("#34D399")); // Neon Green Glow border
+            strokePaint.setStyle(Paint.Style.STROKE);
+            strokePaint.setStrokeWidth(3f);
+            strokePaint.setShadowLayer(15f, 0, -5, Color.parseColor("#34D399")); // Glow effect
+            setLayerType(LAYER_TYPE_SOFTWARE, strokePaint); // Required for shadow
+            
+            path = new Path();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            int w = getWidth(); int h = getHeight();
+            path.reset();
+            // The Wave Logic (Dito copy of screenshot's top border)
+            path.moveTo(0, 50);
+            path.cubicTo(w * 0.25f, 0, w * 0.4f, 80, w * 0.6f, 60);
+            path.cubicTo(w * 0.8f, 40, w * 0.9f, 20, w, 40);
+            path.lineTo(w, h); path.lineTo(0, h); path.close();
+
+            canvas.drawPath(path, paint);
+            canvas.drawPath(path, strokePaint); // Top Glowing Wave
+            super.onDraw(canvas);
+        }
+    }
+
+    // 🔊 2. Real Waveform SeekBar
+    class WaveformSeekBar extends View {
         private Paint paintPlayed, paintUnplayed;
         private float progress = 0f;
-        private float[] randomHeights; // Store static heights so wave doesn't jitter randomly
+        private float[] randomHeights; // To make the wave look static/real
 
-        public WaveSeekBar(Context context) {
+        public WaveformSeekBar(Context context) {
             super(context);
-            paintPlayed = new Paint(); paintPlayed.setColor(android.graphics.Color.parseColor("#A2F42B")); paintPlayed.setStrokeWidth(5f); paintPlayed.setStrokeCap(Paint.Cap.ROUND);
-            paintUnplayed = new Paint(); paintUnplayed.setColor(android.graphics.Color.parseColor("#334433")); paintUnplayed.setStrokeWidth(5f); paintUnplayed.setStrokeCap(Paint.Cap.ROUND);
-            
-            randomHeights = new float[60];
-            for(int i=0; i<60; i++) randomHeights[i] = (float) (0.2 + Math.random() * 0.8); // Random wave look
+            paintPlayed = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paintPlayed.setColor(Color.parseColor("#CCFF00")); // Neon Green
+            paintPlayed.setStrokeWidth(6f);
+            paintPlayed.setStrokeCap(Paint.Cap.ROUND);
+
+            paintUnplayed = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paintUnplayed.setColor(Color.parseColor("#444444")); // Grey
+            paintUnplayed.setStrokeWidth(6f);
+            paintUnplayed.setStrokeCap(Paint.Cap.ROUND);
+
+            // Generate fake audio wave peaks based on screenshot
+            randomHeights = new float[50];
+            for(int i=0; i<50; i++) randomHeights[i] = (float)(Math.random() * 0.8 + 0.2); 
             
             setOnTouchListener((v, e) -> {
                 if(mediaPlayer != null && (e.getAction() == MotionEvent.ACTION_DOWN || e.getAction() == MotionEvent.ACTION_MOVE)) {
-                    float touchX = e.getX(); float newP = touchX / getWidth();
-                    if(newP < 0) newP = 0; if(newP > 1) newP = 1;
-                    mediaPlayer.seekTo((int)(newP * mediaPlayer.getDuration())); setProgress(newP); return true;
-                } return false;
+                    float p = e.getX() / getWidth();
+                    if(p < 0) p = 0; if(p > 1) p = 1;
+                    mediaPlayer.seekTo((int)(p * mediaPlayer.getDuration()));
+                    setProgress(p);
+                    return true;
+                }
+                return false;
             });
         }
+
         public void setProgress(float p) { this.progress = p; invalidate(); }
 
-        @Override protected void onDraw(Canvas canvas) {
+        @Override
+        protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            int bars = 60; float spacing = getWidth() / (float) bars; int centerY = getHeight() / 2;
+            int w = getWidth(); int h = getHeight(); int bars = 50;
+            float spacing = w / (float)bars; int cy = h / 2;
+
             for (int i = 0; i < bars; i++) {
-                float x = i * spacing + (spacing / 2);
-                float h = randomHeights[i] * (getHeight() - 20);
-                Paint p = (x / getWidth() <= progress) ? paintPlayed : paintUnplayed;
-                canvas.drawLine(x, centerY - h / 2, x, centerY + h / 2, p);
+                float x = i * spacing + (spacing / 2f);
+                float barH = randomHeights[i] * h;
+                Paint p = (x / w <= progress) ? paintPlayed : paintUnplayed;
+                // If it's the exact current position, make it slightly taller
+                if (Math.abs((x/w) - progress) < 0.02f) barH = h; 
+                canvas.drawLine(x, cy - barH/2, x, cy + barH/2, p);
+            }
+        }
+    }
+
+    // 🎨 3. Universal Vector Icon Button (No Emojis!)
+    class DrawnIconBtn extends View {
+        private String type;
+        private Paint paint;
+        private boolean drawCircle = false;
+
+        public DrawnIconBtn(Context context, String type, String hexColor) {
+            super(context);
+            this.type = type;
+            paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paint.setColor(Color.parseColor(hexColor));
+            paint.setStyle(Paint.Style.FILL);
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setStrokeJoin(Paint.Join.ROUND);
+        }
+
+        public void setIcon(String newType) { this.type = newType; invalidate(); }
+        public void setDrawCircle(boolean b) { this.drawCircle = b; }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            int w = getWidth(); int h = getHeight();
+            int cx = w/2; int cy = h/2;
+            int size = Math.min(w, h) / 3;
+
+            // Optional Glowing Circle for Play/Pause
+            if (drawCircle) {
+                Paint circleP = new Paint(Paint.ANTI_ALIAS_FLAG);
+                circleP.setColor(paint.getColor()); circleP.setStyle(Paint.Style.STROKE); circleP.setStrokeWidth(4f);
+                canvas.drawCircle(cx, cy, Math.min(w,h)/2f - 5f, circleP);
+            }
+
+            Path path = new Path();
+            if (type.equals("play")) {
+                path.moveTo(cx - size/2f, cy - size); path.lineTo(cx + size, cy); path.lineTo(cx - size/2f, cy + size); path.close();
+                canvas.drawPath(path, paint);
+            } else if (type.equals("pause")) {
+                canvas.drawRoundRect(new RectF(cx - size, cy - size, cx - size/3f, cy + size), 5, 5, paint);
+                canvas.drawRoundRect(new RectF(cx + size/3f, cy - size, cx + size, cy + size), 5, 5, paint);
+            } else if (type.equals("next")) {
+                path.moveTo(cx - size, cy - size/1.5f); path.lineTo(cx, cy); path.lineTo(cx - size, cy + size/1.5f); path.close();
+                canvas.drawPath(path, paint);
+                canvas.drawRect(cx + size/3f, cy - size/1.5f, cx + size/1.5f, cy + size/1.5f, paint);
+            } else if (type.equals("prev")) {
+                path.moveTo(cx + size, cy - size/1.5f); path.lineTo(cx, cy); path.lineTo(cx + size, cy + size/1.5f); path.close();
+                canvas.drawPath(path, paint);
+                canvas.drawRect(cx - size/1.5f, cy - size/1.5f, cx - size/3f, cy + size/1.5f, paint);
+            } else if (type.equals("dots")) {
+                canvas.drawCircle(cx, cy - size/1.2f, size/4f, paint);
+                canvas.drawCircle(cx, cy, size/4f, paint);
+                canvas.drawCircle(cx, cy + size/1.2f, size/4f, paint);
+            } else if (type.equals("settings")) {
+                paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(5f);
+                canvas.drawCircle(cx, cy, size/1.5f, paint);
+                for(int i=0; i<8; i++) {
+                    canvas.drawLine(cx, cy - size/1.2f, cx, cy - size*1.2f, paint);
+                    canvas.rotate(45, cx, cy);
+                }
+                paint.setStyle(Paint.Style.FILL);
+            } else if (type.equals("search")) {
+                paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(5f);
+                canvas.drawCircle(cx - size/4f, cy - size/4f, size/1.5f, paint);
+                canvas.drawLine(cx + size/4f, cy + size/4f, cx + size, cy + size, paint);
+                paint.setStyle(Paint.Style.FILL);
+            } else if (type.equals("filter")) {
+                paint.setStrokeWidth(4f);
+                canvas.drawLine(cx - size, cy - size/2f, cx + size, cy - size/2f, paint);
+                canvas.drawCircle(cx - size/2f, cy - size/2f, size/3f, paint);
+                canvas.drawLine(cx - size, cy + size/2f, cx + size, cy + size/2f, paint);
+                canvas.drawCircle(cx + size/2f, cy + size/2f, size/3f, paint);
+            } else if (type.equals("eq")) { // Vertical bouncing bars
+                paint.setStrokeWidth(6f); paint.setStrokeCap(Paint.Cap.ROUND);
+                canvas.drawLine(cx - size/1.5f, cy + size, cx - size/1.5f, cy + size/3f, paint);
+                canvas.drawLine(cx, cy + size, cx, cy - size/1.5f, paint);
+                canvas.drawLine(cx + size/1.5f, cy + size, cx + size/1.5f, cy, paint);
+            } else if (type.equals("shuffle") || type.equals("repeat")) {
+                // Simplified representation for complex icons
+                paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(4f);
+                canvas.drawRoundRect(new RectF(cx - size, cy - size/2f, cx + size, cy + size/2f), 10, 10, paint);
+                paint.setStyle(Paint.Style.FILL);
             }
         }
     }
