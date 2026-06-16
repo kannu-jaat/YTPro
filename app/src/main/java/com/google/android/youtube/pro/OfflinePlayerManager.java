@@ -5,15 +5,12 @@ import android.content.ContentUris;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.database.Cursor;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.drawable.GradientDrawable;
-import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
@@ -23,15 +20,14 @@ import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.Button; // 🛠️ FIX 1: Missing Import Added
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -60,7 +56,7 @@ public class OfflinePlayerManager {
     private ArrayAdapter<AudioTrack> adapter;
     private int currentTrackIndex = -1;
     private boolean isPlaying = false;
-    private String currentSortMode = "Recent"; // "Recent", "Name", "Duration"
+    private String currentSortMode = "Recent"; 
 
     // Mini Player UI
     private TextView mpTitle, mpArtist, tvCurrentTime, tvTotalTime;
@@ -68,11 +64,11 @@ public class OfflinePlayerManager {
     private WaveformSeekBar waveformSeekBar;
     private Handler progressHandler = new Handler(Looper.getMainLooper());
 
-    private LocalDeckBridge deckListener;
+    // 🛠️ FIX 2: Renamed back to DJDeckListener
+    private DJDeckListener deckListener;
 
-    // Interface for Netlify Local Deck A/B
-    public interface LocalDeckBridge {
-        void loadToLocalDeck(String deck, Uri fileUri);
+    public interface DJDeckListener {
+        void onLoadToDeck(String deck, Uri fileUri);
     }
 
     static class AudioTrack {
@@ -82,7 +78,7 @@ public class OfflinePlayerManager {
         }
     }
 
-    public OfflinePlayerManager(Context context, FrameLayout parentContainer, LocalDeckBridge listener) {
+    public OfflinePlayerManager(Context context, FrameLayout parentContainer, DJDeckListener listener) {
         this.context = context;
         this.parentContainer = parentContainer;
         this.deckListener = listener;
@@ -95,7 +91,7 @@ public class OfflinePlayerManager {
     private void initUI() {
         mainUI = new FrameLayout(context);
         mainUI.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
-        mainUI.setBackgroundColor(Color.parseColor("#050505")); // Pure dark background
+        mainUI.setBackgroundColor(Color.parseColor("#050505")); 
         mainUI.setVisibility(View.GONE);
 
         LinearLayout verticalLayout = new LinearLayout(context);
@@ -108,7 +104,6 @@ public class OfflinePlayerManager {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         
-        // App Logo & Name
         LinearLayout titleBox = new LinearLayout(context);
         titleBox.setOrientation(LinearLayout.VERTICAL);
         TextView title = new TextView(context);
@@ -124,7 +119,6 @@ public class OfflinePlayerManager {
         LinearLayout.LayoutParams tParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
         header.addView(titleBox, tParams);
 
-        // Settings Icon (Real drawn gear)
         DrawnIconBtn btnSettings = new DrawnIconBtn(context, "settings", "#FFFFFF");
         btnSettings.setOnClickListener(v -> openSettingsDialog());
         header.addView(btnSettings);
@@ -154,13 +148,12 @@ public class OfflinePlayerManager {
         LinearLayout.LayoutParams etParams = new LinearLayout.LayoutParams(0, -1, 1.0f);
         etParams.setMargins(20, 0, 20, 0);
 
-        DrawnIconBtn filterIcon = new DrawnIconBtn(context, "filter", "#CCFF00"); // Neon Yellowish Green
+        DrawnIconBtn filterIcon = new DrawnIconBtn(context, "filter", "#CCFF00");
 
         searchBox.addView(searchIcon);
         searchBox.addView(etSearch, etParams);
         searchBox.addView(filterIcon);
 
-        // Live Search Logic
         etSearch.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) { filterTracks(s.toString()); }
@@ -193,7 +186,7 @@ public class OfflinePlayerManager {
         listView = new ListView(context);
         listView.setDivider(null);
         listView.setClipToPadding(false);
-        listView.setPadding(0, 0, 0, 350); // Extra padding for wavy mini player
+        listView.setPadding(0, 0, 0, 350); 
         setupListViewAdapter();
 
         verticalLayout.addView(header);
@@ -211,20 +204,18 @@ public class OfflinePlayerManager {
 
     private void setupWavyMiniPlayer() {
         miniPlayer = new WavyMiniPlayer(context);
-        FrameLayout.LayoutParams mParams = new FrameLayout.LayoutParams(-1, 320); // Taller for the wave
+        FrameLayout.LayoutParams mParams = new FrameLayout.LayoutParams(-1, 320); 
         mParams.gravity = Gravity.BOTTOM;
         miniPlayer.setLayoutParams(mParams);
-        miniPlayer.setPadding(40, 60, 40, 30); // Top padding accounts for wave
+        miniPlayer.setPadding(40, 60, 40, 30); 
 
         LinearLayout vBox = new LinearLayout(context);
         vBox.setOrientation(LinearLayout.VERTICAL);
 
-        // Top Row: Info & EQ
         LinearLayout infoRow = new LinearLayout(context);
         infoRow.setOrientation(LinearLayout.HORIZONTAL);
         infoRow.setGravity(Gravity.CENTER_VERTICAL);
         
-        // Custom Album Art Box
         FrameLayout artBox = new FrameLayout(context);
         GradientDrawable artBg = new GradientDrawable();
         artBg.setColor(Color.parseColor("#222222"));
@@ -253,12 +244,10 @@ public class OfflinePlayerManager {
         infoRow.addView(textLayout, new LinearLayout.LayoutParams(0, -2, 1.0f));
         infoRow.addView(eqIcon);
 
-        // Middle Row: Waveform Seekbar
         waveformSeekBar = new WaveformSeekBar(context);
         LinearLayout.LayoutParams waveParams = new LinearLayout.LayoutParams(-1, 60);
         waveParams.setMargins(0, 30, 0, 10);
 
-        // Time Row
         LinearLayout timeRow = new LinearLayout(context);
         timeRow.setOrientation(LinearLayout.HORIZONTAL);
         tvCurrentTime = new TextView(context); tvCurrentTime.setText("0:00"); tvCurrentTime.setTextColor(Color.parseColor("#CCFF00")); tvCurrentTime.setTextSize(10f);
@@ -266,7 +255,6 @@ public class OfflinePlayerManager {
         timeRow.addView(tvCurrentTime, new LinearLayout.LayoutParams(0, -2, 1.0f));
         timeRow.addView(tvTotalTime, new LinearLayout.LayoutParams(0, -2, 1.0f));
 
-        // Bottom Row: Controls (Real Shapes)
         LinearLayout controlsRow = new LinearLayout(context);
         controlsRow.setOrientation(LinearLayout.HORIZONTAL);
         controlsRow.setGravity(Gravity.CENTER);
@@ -275,7 +263,6 @@ public class OfflinePlayerManager {
         DrawnIconBtn btnShuffle = new DrawnIconBtn(context, "shuffle", "#CCFF00");
         DrawnIconBtn btnPrev = new DrawnIconBtn(context, "prev", "#FFFFFF");
         
-        // Play/Pause with Circle Glow
         btnPlayPause = new DrawnIconBtn(context, "play", "#CCFF00");
         btnPlayPause.setDrawCircle(true);
         btnPlayPause.setOnClickListener(v -> togglePlayPause());
@@ -289,7 +276,7 @@ public class OfflinePlayerManager {
         LinearLayout.LayoutParams cParams = new LinearLayout.LayoutParams(0, 100, 1.0f);
         controlsRow.addView(btnShuffle, cParams);
         controlsRow.addView(btnPrev, cParams);
-        controlsRow.addView(btnPlayPause, new LinearLayout.LayoutParams(140, 140)); // Bigger center button
+        controlsRow.addView(btnPlayPause, new LinearLayout.LayoutParams(140, 140)); 
         controlsRow.addView(btnNext, cParams);
         controlsRow.addView(btnRepeat, cParams);
 
@@ -312,7 +299,7 @@ public class OfflinePlayerManager {
                     row.setGravity(Gravity.CENTER_VERTICAL);
                     
                     GradientDrawable bg = new GradientDrawable();
-                    bg.setColor(Color.parseColor("#111111")); // Dark rounded rect
+                    bg.setColor(Color.parseColor("#111111")); 
                     bg.setCornerRadius(40f);
                     row.setBackground(bg);
                     row.setPadding(30, 20, 20, 20);
@@ -321,7 +308,6 @@ public class OfflinePlayerManager {
                     rp.setMargins(0, 0, 0, 25);
                     row.setLayoutParams(rp);
 
-                    // Art Box
                     FrameLayout artBox = new FrameLayout(context);
                     GradientDrawable artBg = new GradientDrawable();
                     artBg.setColor(Color.parseColor("#222222"));
@@ -329,7 +315,6 @@ public class OfflinePlayerManager {
                     artBox.setBackground(artBg);
                     artBox.setLayoutParams(new LinearLayout.LayoutParams(110, 110));
 
-                    // Text Info
                     LinearLayout txtBox = new LinearLayout(context);
                     txtBox.setOrientation(LinearLayout.VERTICAL);
                     txtBox.setPadding(30, 0, 10, 0);
@@ -350,13 +335,11 @@ public class OfflinePlayerManager {
                     txtBox.addView(tName);
                     txtBox.addView(tArtist);
 
-                    // Duration
                     TextView tDur = new TextView(context);
                     tDur.setId(View.generateViewId());
                     tDur.setTextColor(Color.parseColor("#888888"));
                     tDur.setTextSize(12f);
                     
-                    // 3 Dots (Real Canvas Drawn)
                     DrawnIconBtn btnDots = new DrawnIconBtn(context, "dots", "#FFFFFF");
                     btnDots.setLayoutParams(new LinearLayout.LayoutParams(80, 80));
 
@@ -389,8 +372,6 @@ public class OfflinePlayerManager {
         };
         listView.setAdapter(adapter);
     }
-
-    // --- LOGIC FUNCTIONS ---
 
     public void toggleVisibility() {
         if (mainUI.getVisibility() == View.VISIBLE) {
@@ -455,7 +436,6 @@ public class OfflinePlayerManager {
         adapter.notifyDataSetChanged();
     }
 
-    // --- SORTING ---
     private void openSortDialog(TextView sortBtn) {
         String[] options = {"Recently Added", "Name (A-Z)", "Duration"};
         new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
@@ -476,12 +456,10 @@ public class OfflinePlayerManager {
         } else if (currentSortMode.equals("Duration")) {
             Collections.sort(displayList, (a, b) -> Long.compare(b.duration, a.duration));
         } else {
-            // Re-load clears and uses default DESC date order
             Collections.sort(displayList, (a, b) -> Long.compare(b.id, a.id));
         }
     }
 
-    // --- SETTINGS (Filter & Unblock) ---
     private void openSettingsDialog() {
         LinearLayout layout = new LinearLayout(context);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -528,18 +506,18 @@ public class OfflinePlayerManager {
             }).show();
     }
 
-    // --- 3 DOTS MENU (Netlify Local Deck Load & Block) ---
+    // 🛠️ FIX 3: Updated to match MainActivity Deck Listener Names
     private void openTrackMenu(AudioTrack track) {
         String[] options = {"🎧 Load to Deck A (Left)", "🎛️ Load to Deck B (Right)", "🚫 Block this Audio", "📁 Block entire Folder: " + track.folder};
         new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(track.title)
             .setItems(options, (d, w) -> {
                 if (w == 0) {
-                    if(deckListener != null) deckListener.loadToLocalDeck("A", track.uri);
-                    Toast.makeText(context, "Loaded to Netlify Deck A", Toast.LENGTH_SHORT).show();
+                    if(deckListener != null) deckListener.onLoadToDeck("left", track.uri);
+                    Toast.makeText(context, "Loaded to L Deck 🎧", Toast.LENGTH_SHORT).show();
                 } else if (w == 1) {
-                    if(deckListener != null) deckListener.loadToLocalDeck("B", track.uri);
-                    Toast.makeText(context, "Loaded to Netlify Deck B", Toast.LENGTH_SHORT).show();
+                    if(deckListener != null) deckListener.onLoadToDeck("right", track.uri);
+                    Toast.makeText(context, "Loaded to R Deck 🎛️", Toast.LENGTH_SHORT).show();
                 } else if (w == 2) {
                     Set<String> b = new HashSet<>(prefs.getStringSet("BLOCKED_AUDIOS", new HashSet<>()));
                     b.add(String.valueOf(track.id));
@@ -554,12 +532,11 @@ public class OfflinePlayerManager {
             }).show();
     }
 
-    // --- MEDIA PLAYER ENGINE ---
     private void playTrack(AudioTrack track) {
         currentTrackIndex = displayList.indexOf(track);
         if (mediaPlayer == null) {
             mediaPlayer = new MediaPlayer();
-            mediaPlayer.setOnCompletionListener(mp -> playNext()); // Auto-Next
+            mediaPlayer.setOnCompletionListener(mp -> playNext()); 
         } else {
             mediaPlayer.reset();
         }
@@ -568,7 +545,7 @@ public class OfflinePlayerManager {
             mediaPlayer.prepare();
             mediaPlayer.start();
             isPlaying = true;
-            btnPlayPause.setIcon("pause"); // Real pause shape
+            btnPlayPause.setIcon("pause"); 
             mpTitle.setText(track.title);
             mpArtist.setText(track.artist != null ? track.artist : "Unknown");
             tvTotalTime.setText(formatTime(track.duration));
@@ -631,10 +608,9 @@ public class OfflinePlayerManager {
     }
 
     // ==========================================
-    // 🎨 CUSTOM DRAWN CLASSES (NO XML, NO ASSETS)
+    // 🎨 CUSTOM DRAWN CLASSES
     // ==========================================
 
-    // 🌊 1. Wavy Mini Player Background
     class WavyMiniPlayer extends FrameLayout {
         private Paint paint, strokePaint;
         private Path path;
@@ -643,15 +619,15 @@ public class OfflinePlayerManager {
             super(context);
             setWillNotDraw(false);
             paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            paint.setColor(Color.parseColor("#151515")); // Dark Glass
-            paint.setAlpha(240); // Slight transparency
+            paint.setColor(Color.parseColor("#151515")); 
+            paint.setAlpha(240); 
 
             strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            strokePaint.setColor(Color.parseColor("#34D399")); // Neon Green Glow border
+            strokePaint.setColor(Color.parseColor("#34D399")); 
             strokePaint.setStyle(Paint.Style.STROKE);
             strokePaint.setStrokeWidth(3f);
-            strokePaint.setShadowLayer(15f, 0, -5, Color.parseColor("#34D399")); // Glow effect
-            setLayerType(LAYER_TYPE_SOFTWARE, strokePaint); // Required for shadow
+            strokePaint.setShadowLayer(15f, 0, -5, Color.parseColor("#34D399")); 
+            setLayerType(LAYER_TYPE_SOFTWARE, strokePaint); 
             
             path = new Path();
         }
@@ -660,37 +636,34 @@ public class OfflinePlayerManager {
         protected void onDraw(Canvas canvas) {
             int w = getWidth(); int h = getHeight();
             path.reset();
-            // The Wave Logic (Dito copy of screenshot's top border)
             path.moveTo(0, 50);
             path.cubicTo(w * 0.25f, 0, w * 0.4f, 80, w * 0.6f, 60);
             path.cubicTo(w * 0.8f, 40, w * 0.9f, 20, w, 40);
             path.lineTo(w, h); path.lineTo(0, h); path.close();
 
             canvas.drawPath(path, paint);
-            canvas.drawPath(path, strokePaint); // Top Glowing Wave
+            canvas.drawPath(path, strokePaint); 
             super.onDraw(canvas);
         }
     }
 
-    // 🔊 2. Real Waveform SeekBar
     class WaveformSeekBar extends View {
         private Paint paintPlayed, paintUnplayed;
         private float progress = 0f;
-        private float[] randomHeights; // To make the wave look static/real
+        private float[] randomHeights; 
 
         public WaveformSeekBar(Context context) {
             super(context);
             paintPlayed = new Paint(Paint.ANTI_ALIAS_FLAG);
-            paintPlayed.setColor(Color.parseColor("#CCFF00")); // Neon Green
+            paintPlayed.setColor(Color.parseColor("#CCFF00")); 
             paintPlayed.setStrokeWidth(6f);
             paintPlayed.setStrokeCap(Paint.Cap.ROUND);
 
             paintUnplayed = new Paint(Paint.ANTI_ALIAS_FLAG);
-            paintUnplayed.setColor(Color.parseColor("#444444")); // Grey
+            paintUnplayed.setColor(Color.parseColor("#444444")); 
             paintUnplayed.setStrokeWidth(6f);
             paintUnplayed.setStrokeCap(Paint.Cap.ROUND);
 
-            // Generate fake audio wave peaks based on screenshot
             randomHeights = new float[50];
             for(int i=0; i<50; i++) randomHeights[i] = (float)(Math.random() * 0.8 + 0.2); 
             
@@ -718,14 +691,12 @@ public class OfflinePlayerManager {
                 float x = i * spacing + (spacing / 2f);
                 float barH = randomHeights[i] * h;
                 Paint p = (x / w <= progress) ? paintPlayed : paintUnplayed;
-                // If it's the exact current position, make it slightly taller
                 if (Math.abs((x/w) - progress) < 0.02f) barH = h; 
                 canvas.drawLine(x, cy - barH/2, x, cy + barH/2, p);
             }
         }
     }
 
-    // 🎨 3. Universal Vector Icon Button (No Emojis!)
     class DrawnIconBtn extends View {
         private String type;
         private Paint paint;
@@ -751,7 +722,6 @@ public class OfflinePlayerManager {
             int cx = w/2; int cy = h/2;
             int size = Math.min(w, h) / 3;
 
-            // Optional Glowing Circle for Play/Pause
             if (drawCircle) {
                 Paint circleP = new Paint(Paint.ANTI_ALIAS_FLAG);
                 circleP.setColor(paint.getColor()); circleP.setStyle(Paint.Style.STROKE); circleP.setStrokeWidth(4f);
@@ -796,13 +766,12 @@ public class OfflinePlayerManager {
                 canvas.drawCircle(cx - size/2f, cy - size/2f, size/3f, paint);
                 canvas.drawLine(cx - size, cy + size/2f, cx + size, cy + size/2f, paint);
                 canvas.drawCircle(cx + size/2f, cy + size/2f, size/3f, paint);
-            } else if (type.equals("eq")) { // Vertical bouncing bars
+            } else if (type.equals("eq")) { 
                 paint.setStrokeWidth(6f); paint.setStrokeCap(Paint.Cap.ROUND);
                 canvas.drawLine(cx - size/1.5f, cy + size, cx - size/1.5f, cy + size/3f, paint);
                 canvas.drawLine(cx, cy + size, cx, cy - size/1.5f, paint);
                 canvas.drawLine(cx + size/1.5f, cy + size, cx + size/1.5f, cy, paint);
             } else if (type.equals("shuffle") || type.equals("repeat")) {
-                // Simplified representation for complex icons
                 paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(4f);
                 canvas.drawRoundRect(new RectF(cx - size, cy - size/2f, cx + size, cy + size/2f), 10, 10, paint);
                 paint.setStyle(Paint.Style.FILL);
