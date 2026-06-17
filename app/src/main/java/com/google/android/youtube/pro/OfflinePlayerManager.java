@@ -120,7 +120,7 @@ public class OfflinePlayerManager {
 
         // 🛠️ FIX: Strict Layout Params for Settings Icon
         DrawnIconBtn btnSettings = new DrawnIconBtn(context, "settings", "#FFFFFF");
-        btnSettings.setLayoutParams(new LinearLayout.LayoutParams(90, 90)); // Size constrained
+        btnSettings.setLayoutParams(new LinearLayout.LayoutParams(70, 70)); // Size constrained
         btnSettings.setOnClickListener(v -> openSettingsDialog());
         header.addView(btnSettings);
 
@@ -178,7 +178,7 @@ public class OfflinePlayerManager {
         allAudioTxt.setTypeface(null, android.graphics.Typeface.BOLD);
         
         TextView sortTxt = new TextView(context);
-        sortTxt.setText("Recently Added ˅");
+        sortTxt.setText("Recently Added ↓");
         sortTxt.setTextColor(Color.parseColor("#CCFF00"));
         sortTxt.setTextSize(14f);
         sortTxt.setGravity(Gravity.RIGHT);
@@ -227,26 +227,33 @@ public class OfflinePlayerManager {
         artBg.setColor(Color.parseColor("#222222"));
         artBg.setCornerRadius(20f);
         artBox.setBackground(artBg);
-        artBox.setLayoutParams(new LinearLayout.LayoutParams(100, 100));
+        artBox.setLayoutParams(new LinearLayout.LayoutParams(90, 90));
 
         LinearLayout textLayout = new LinearLayout(context);
         textLayout.setOrientation(LinearLayout.VERTICAL);
         textLayout.setPadding(30, 0, 0, 0);
         mpTitle = new TextView(context);
-        mpTitle.setText("Not Playing");
+       mpTitle.setText("Not Playing");
         mpTitle.setTextColor(Color.WHITE);
         mpTitle.setTextSize(16f);
         mpTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        // 🛠️ NAYA FIX: Lamba naam hone par 1 line me rakhega aur end me ... lagayega
+        mpTitle.setMaxLines(1);
+        mpTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        
         mpArtist = new TextView(context);
         mpArtist.setText("--");
         mpArtist.setTextColor(Color.parseColor("#888888"));
         mpArtist.setTextSize(12f);
+        // 🛠️ NAYA FIX: Artist name ke liye bhi same
+        mpArtist.setMaxLines(1);
+        mpArtist.setEllipsize(android.text.TextUtils.TruncateAt.END);
         textLayout.addView(mpTitle);
         textLayout.addView(mpArtist);
         
         // 🛠️ FIX: Strict Layout Params for EQ Icon
         DrawnIconBtn eqIcon = new DrawnIconBtn(context, "eq", "#CCFF00");
-        eqIcon.setLayoutParams(new LinearLayout.LayoutParams(80, 80));
+        eqIcon.setLayoutParams(new LinearLayout.LayoutParams(50, 50));
 
         infoRow.addView(artBox);
         infoRow.addView(textLayout, new LinearLayout.LayoutParams(0, -2, 1.0f));
