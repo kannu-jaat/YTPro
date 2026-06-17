@@ -203,7 +203,7 @@ public class MainActivity extends Activity {
         btnOfflineToggle.setTextColor(android.graphics.Color.parseColor("#34D399"));
         btnOfflineToggle.setTextSize(12f);
         btnOfflineToggle.setTypeface(null, android.graphics.Typeface.BOLD);
-        ytHeader.addView(btnOfflineToggle, new LinearLayout.LayoutParams(-2, -1));
+        ytHeader.addView(btnOfflineToggle, new LinearLayout.LayoutParams(90, -1));
 
         Button btnRefresh = new Button(this);
         btnRefresh.setText("🔄");
@@ -261,14 +261,30 @@ public class MainActivity extends Activity {
         offlinePlayer = new OfflinePlayerManager(this, contentContainer, new OfflinePlayerManager.DJDeckListener() {
             @Override
             public void onLoadToDeck(String deck, Uri fileUri) {
-                // Toast notification for user feedback
-                Toast.makeText(MainActivity.this, "Connecting to Local Deck " + deck, Toast.LENGTH_SHORT).show();
+                Toast.makeText(MainActivity.this, "Loading to Local Deck " + deck, Toast.LENGTH_SHORT).show();
                 
-                // JavaScript Bridge for Netlify Local Decks
-                // Note: Agar aapke Netlify HTML me local input ka ID alag hai (jaise 'localLeft' ya 'fileLeft'), toh yahan change kar lena
-                String inputId = ("left".equalsIgnoreCase(deck) || "A".equalsIgnoreCase(deck)) ? "leftUrl" : "rightUrl";
-                String js = "var el = document.getElementById('" + inputId + "'); " +
-                            "if(el) { el.value = '" + fileUri.toString() + "'; el.dispatchEvent(new Event('input', { bubbles: true })); }";
+                // 🛠️ NAYA FIX: "Choose File" ki jagah direct <audio> tag me gaana load karega!
+                String deckIdentifier = ("left".equalsIgnoreCase(deck) || "A".equalsIgnoreCase(deck)) ? "Local Deck A" : "Local Deck B";
+                
+                String js = "try { " +
+                            "  var headings = document.querySelectorAll('*'); " +
+                            "  var deckContainer = null; " +
+                            "  for (var i = 0; i < headings.length; i++) { " +
+                            "    if (headings[i].textContent && headings[i].textContent.trim() === '" + deckIdentifier + "') { " +
+                            "      deckContainer = headings[i].parentElement; " +
+                            "      break; " +
+                            "    } " +
+                            "  } " +
+                            "  if (deckContainer) { " +
+                            "    var audioTag = deckContainer.querySelector('audio'); " +
+                            "    if (audioTag) { " +
+                            "      audioTag.src = '" + fileUri.toString() + "'; " +
+                            "      audioTag.load(); " + // Audio buffer karna shuru karega
+                            "      audioTag.play(); " + // Direct play karna hai toh ye line rehne do
+                            "    } else { alert('Audio player not found in ' + deckIdentifier); } " +
+                            "  } else { console.log('Deck container not found'); } " +
+                            "} catch(e) { console.log(e); }";
+                            
                 web.evaluateJavascript(js, null);
             }
         });
