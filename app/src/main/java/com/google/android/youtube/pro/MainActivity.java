@@ -261,30 +261,20 @@ public class MainActivity extends Activity {
         offlinePlayer = new OfflinePlayerManager(this, contentContainer, new OfflinePlayerManager.DJDeckListener() {
             @Override
             public void onLoadToDeck(String deck, Uri fileUri) {
-                Toast.makeText(MainActivity.this, "Loading to Local Deck " + deck, Toast.LENGTH_SHORT).show();
+                // Determine A or B
+                String deckId = ("left".equalsIgnoreCase(deck) || "A".equalsIgnoreCase(deck)) ? "A" : "B";
+                Toast.makeText(MainActivity.this, "Loading to Local Deck " + deckId, Toast.LENGTH_SHORT).show();
                 
-                // 🛠️ NAYA FIX: "Choose File" ki jagah direct <audio> tag me gaana load karega!
-                String deckIdentifier = ("left".equalsIgnoreCase(deck) || "A".equalsIgnoreCase(deck)) ? "Local Deck A" : "Local Deck B";
-                
+                // 🛠️ EXACT HTML MATCHING SCRIPT: Targets window.localPlayers.A / B directly
                 String js = "try { " +
-                            "  var headings = document.querySelectorAll('*'); " +
-                            "  var deckContainer = null; " +
-                            "  for (var i = 0; i < headings.length; i++) { " +
-                            "    if (headings[i].textContent && headings[i].textContent.trim() === '" + deckIdentifier + "') { " +
-                            "      deckContainer = headings[i].parentElement; " +
-                            "      break; " +
-                            "    } " +
-                            "  } " +
-                            "  if (deckContainer) { " +
-                            "    var audioTag = deckContainer.querySelector('audio'); " +
-                            "    if (audioTag) { " +
-                            "      audioTag.src = '" + fileUri.toString() + "'; " +
-                            "      audioTag.load(); " + // Audio buffer karna shuru karega
-                            "      audioTag.play(); " + // Direct play karna hai toh ye line rehne do
-                            "    } else { alert('Audio player not found in ' + deckIdentifier); } " +
-                            "  } else { console.log('Deck container not found'); } " +
-                            "} catch(e) { console.log(e); }";
-                            
+                            "  if (window.localPlayers && window.localPlayers['" + deckId + "']) { " +
+                            "    window.localPlayers['" + deckId + "'].src = '" + fileUri.toString() + "'; " +
+                            "    document.getElementById('fileName" + deckId + "').textContent = 'Track Loaded via App 🎵'; " +
+                            "    window.localPlayers['" + deckId + "'].load(); " +
+                            "    document.getElementById('playBtn" + deckId + "').style.display = 'block'; " +
+                            "    document.getElementById('pauseBtn" + deckId + "').style.display = 'none'; " +
+                            "  } else { alert('Local Player " + deckId + " not found in HTML!'); } " +
+                            "} catch(e) { console.log('Deck Load Error: ' + e); }";
                 web.evaluateJavascript(js, null);
             }
         });
