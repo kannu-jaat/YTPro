@@ -57,6 +57,8 @@ public class MainActivity extends Activity {
     public boolean mediaSession = false;
     public boolean isPip = false;
     public boolean dL = false;
+// 🕵️ SECRET HIJACK VARIABLE
+    public Uri pendingAutoInjectUri = null;
 
     private YTProWebView web; 
     private YTProWebView ytHomeWeb; 
@@ -257,53 +259,27 @@ public class MainActivity extends Activity {
 
         ytWrapper.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
 
-        // 🎵 Initialize the Premium Offline Player (THE PROGRAMMATIC HIJACK SOLUTION!)
+        // 🎵 Initialize the Premium Offline Player (The Hijacker)
         offlinePlayer = new OfflinePlayerManager(this, contentContainer, new OfflinePlayerManager.DJDeckListener() {
             @Override
             public void onLoadToDeck(String deck, Uri fileUri) {
-                final String deckId = ("left".equalsIgnoreCase(deck) || "A".equalsIgnoreCase(deck)) ? "A" : "B";
-                Toast.makeText(MainActivity.this, "Loading to Local Deck " + deckId, Toast.LENGTH_SHORT).show();
+                String deckId = ("left".equalsIgnoreCase(deck) || "A".equalsIgnoreCase(deck)) ? "A" : "B";
+                Toast.makeText(MainActivity.this, "Loading to Deck " + deckId + "...", Toast.LENGTH_SHORT).show();
                 
-                // Step 1: Pehle HTML ke Choose File button ko trigger karo taaki purana callback clear ya active ho sake
-                String targetInputId = "fileInput" + deckId;
-                String triggerClickJs = "try { " +
-                                        "  var btn = document.getElementById('" + targetInputId + "'); " +
-                                        "  if(btn) { btn.click(); } " +
-                                        "} catch(e) { console.log(e); }";
-                web.evaluateJavascript(triggerClickJs, null);
-
-                // Step 2: Android ke WebChromeClient ka use karke direct file manager bypass karo aur Uri pass kar do
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            // Agar aapki webview me openFileChooser ya onShowFileChooser ka callback saved hai,
-                            // toh hum use direct fileUri[] array bhej sakte hain.
-                            // Par sabse clean aur safe rasta jo aapne bataya, hum seedhe input element ka filename text aur src update karwa ke play trigger karwa denge.
-                            
-                            String directInjectJs = "try { " +
-                                                    "  if (typeof localPlayers !== 'undefined' && localPlayers['" + deckId + "']) { " +
-                                                    "    var blobUrl = '" + fileUri.toString() + "'; " +
-                                                    "    localPlayers['" + deckId + "'].src = blobUrl; " +
-                                                    "    var nameLabel = document.getElementById('fileName" + deckId + "'); " +
-                                                    "    if(nameLabel) nameLabel.textContent = 'Loaded: Local Track 🎵'; " +
-                                                    "    localPlayers['" + deckId + "'].load(); " +
-                                                    "    setTimeout(function() { " +
-                                                    "       var playBtn = document.getElementById('playBtn" + deckId + "'); " +
-                                                    "       if(playBtn) { playBtn.click(); } " + // Programmatic HTML click to sync UI meters
-                                                    "    }, 300); " +
-                                                    "  } " +
-                                                    "} catch(e) { console.log('Hijack Error: ' + e); }";
-                                                    
-                            web.evaluateJavascript(directInjectJs, null);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    }
-                });
+                // 1. Gaane ko secret variable me dalo
+                pendingAutoInjectUri = fileUri;
+                
+                // 2. JavaScript se HTML wale <input type="file"> ko fake click maaro! 
+                // Ye click direct openCustomAudioPopup ko jagayega aur gaana inject ho jayega.
+                String js = "document.getElementById('fileInput" + deckId + "').click();";
+                web.evaluateJavascript(js, null);
+                
+                // Optional: Gaana load hote hi Lite Player hide karke YT screen dikhani ho toh:
+                // offlinePlayer.toggleVisibility();
+                // ytHomeWeb.setVisibility(View.VISIBLE);
+                // btnOfflineToggle.setText("🎵 LOCAL");
             }
         });
-
         // 🔄 Switch Between YT and Offline Player
         btnOfflineToggle.setOnClickListener(v -> {
             if (offlinePlayer != null) {
@@ -544,7 +520,18 @@ public class MainActivity extends Activity {
         }
     }
 
-    public void openCustomAudioPopup(final ValueCallback<Uri[]> filePathCallback) {
+//Custom Audio Popup List
+
+public void openCustomAudioPopup(final ValueCallback<Uri[]> filePathCallback) {
+        // 🕵️ HIJACK LOGIC: Agar app se direct load kiya gaya hai, toh popup mat kholo, direct file de do!
+        if (pendingAutoInjectUri != null) {
+            filePathCallback.onReceiveValue(new Uri[]{pendingAutoInjectUri});
+            pendingAutoInjectUri = null; // Reset kar do
+            return; // Aage ka list open hone wala code block kar do
+        }
+
+        // ... Yahan se aapka purana ArrayList aur Dialog wala code same rahega ...
+        
         final ArrayList<AudioModel> allTracks = new ArrayList<>();
         final ArrayList<AudioModel> displayList = new ArrayList<>();
         Uri collection = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL) : MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
