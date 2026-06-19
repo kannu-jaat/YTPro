@@ -49,7 +49,6 @@ public class OfflinePlayerManager {
     private WavyMiniPlayer miniPlayer;
     private SharedPreferences prefs;
 
-    // Media & Data
     private MediaPlayer mediaPlayer;
     private ArrayList<AudioTrack> allTracksList;
     private ArrayList<AudioTrack> displayList;
@@ -58,7 +57,6 @@ public class OfflinePlayerManager {
     private boolean isPlaying = false;
     private String currentSortMode = "Recent"; 
 
-    // Mini Player UI
     private TextView mpTitle, mpArtist, tvCurrentTime, tvTotalTime;
     private DrawnIconBtn btnPlayPause;
     private WaveformSeekBar waveformSeekBar;
@@ -96,7 +94,7 @@ public class OfflinePlayerManager {
         LinearLayout verticalLayout = new LinearLayout(context);
         verticalLayout.setOrientation(LinearLayout.VERTICAL);
         verticalLayout.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
-        verticalLayout.setPadding(30, 40, 30, 0);
+        verticalLayout.setPadding(30, 20, 30, 0);
 
         // --- TOP HEADER ---
         LinearLayout header = new LinearLayout(context);
@@ -118,9 +116,8 @@ public class OfflinePlayerManager {
         LinearLayout.LayoutParams tParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
         header.addView(titleBox, tParams);
 
-        // 🛠️ FIX: Strict Layout Params for Settings Icon
         DrawnIconBtn btnSettings = new DrawnIconBtn(context, "settings", "#FFFFFF");
-        btnSettings.setLayoutParams(new LinearLayout.LayoutParams(70, 70)); // Size constrained
+        btnSettings.setLayoutParams(new LinearLayout.LayoutParams(60, 60)); // Chota icon
         btnSettings.setOnClickListener(v -> openSettingsDialog());
         header.addView(btnSettings);
 
@@ -133,27 +130,26 @@ public class OfflinePlayerManager {
         searchBg.setCornerRadius(50f);
         searchBox.setBackground(searchBg);
         searchBox.setPadding(30, 10, 30, 10);
-        LinearLayout.LayoutParams sParams = new LinearLayout.LayoutParams(-1, 120);
-        sParams.setMargins(0, 40, 0, 40);
+        LinearLayout.LayoutParams sParams = new LinearLayout.LayoutParams(-1, 100); // Height reduced
+        sParams.setMargins(0, 30, 0, 30);
         searchBox.setLayoutParams(sParams);
 
-        // 🛠️ FIX: Strict Layout Params for Search & Filter Icons
         DrawnIconBtn searchIcon = new DrawnIconBtn(context, "search", "#888888");
-        searchIcon.setLayoutParams(new LinearLayout.LayoutParams(60, 60));
+        searchIcon.setLayoutParams(new LinearLayout.LayoutParams(50, 50)); // Chota icon
 
         EditText etSearch = new EditText(context);
         etSearch.setHint("Search audio...");
         etSearch.setHintTextColor(Color.parseColor("#888888"));
         etSearch.setTextColor(Color.WHITE);
         etSearch.setBackgroundColor(Color.TRANSPARENT);
-        etSearch.setTextSize(16f);
+        etSearch.setTextSize(14f);
         etSearch.setMaxLines(1);
         etSearch.setInputType(InputType.TYPE_CLASS_TEXT);
         LinearLayout.LayoutParams etParams = new LinearLayout.LayoutParams(0, -1, 1.0f);
         etParams.setMargins(20, 0, 20, 0);
 
         DrawnIconBtn filterIcon = new DrawnIconBtn(context, "filter", "#CCFF00");
-        filterIcon.setLayoutParams(new LinearLayout.LayoutParams(60, 60));
+        filterIcon.setLayoutParams(new LinearLayout.LayoutParams(50, 50)); // Chota icon
 
         searchBox.addView(searchIcon);
         searchBox.addView(etSearch, etParams);
@@ -169,18 +165,18 @@ public class OfflinePlayerManager {
         LinearLayout sortHeader = new LinearLayout(context);
         sortHeader.setOrientation(LinearLayout.HORIZONTAL);
         sortHeader.setGravity(Gravity.CENTER_VERTICAL);
-        sortHeader.setPadding(0, 0, 0, 20);
+        sortHeader.setPadding(0, 0, 0, 10);
 
         TextView allAudioTxt = new TextView(context);
         allAudioTxt.setText("All Audio");
         allAudioTxt.setTextColor(Color.WHITE);
-        allAudioTxt.setTextSize(18f);
+        allAudioTxt.setTextSize(16f);
         allAudioTxt.setTypeface(null, android.graphics.Typeface.BOLD);
         
         TextView sortTxt = new TextView(context);
-        sortTxt.setText("Recently Added ↓");
+        sortTxt.setText("Recently Added ˅");
         sortTxt.setTextColor(Color.parseColor("#CCFF00"));
-        sortTxt.setTextSize(14f);
+        sortTxt.setTextSize(12f);
         sortTxt.setGravity(Gravity.RIGHT);
         sortTxt.setOnClickListener(v -> openSortDialog(sortTxt));
         
@@ -191,13 +187,12 @@ public class OfflinePlayerManager {
         listView = new ListView(context);
         listView.setDivider(null);
         listView.setClipToPadding(false);
-        listView.setPadding(0, 0, 0, 350); 
+        listView.setPadding(0, 0, 0, 450); // Mota bottom padding taaki list aaram se slide ho sake
         setupListViewAdapter();
 
         verticalLayout.addView(header);
         verticalLayout.addView(searchBox);
         verticalLayout.addView(sortHeader);
-        // 🛠️ FIX: height = 0, weight = 1.0f. Ye ensure karega ki ListView bachi hui saari space le, icons ko bahar na feke
         verticalLayout.addView(listView, new LinearLayout.LayoutParams(-1, 0, 1.0f)); 
         
         // --- WAVY MINI PLAYER ---
@@ -210,10 +205,11 @@ public class OfflinePlayerManager {
 
     private void setupWavyMiniPlayer() {
         miniPlayer = new WavyMiniPlayer(context);
-        FrameLayout.LayoutParams mParams = new FrameLayout.LayoutParams(-1, 320); 
+        // WRAP_CONTENT se button bahar nahi bhagenge
+        FrameLayout.LayoutParams mParams = new FrameLayout.LayoutParams(-1, FrameLayout.LayoutParams.WRAP_CONTENT); 
         mParams.gravity = Gravity.BOTTOM;
         miniPlayer.setLayoutParams(mParams);
-        miniPlayer.setPadding(40, 60, 40, 30); 
+        miniPlayer.setPadding(30, 80, 30, 30); // Top padding wave ke hisaab se
 
         LinearLayout vBox = new LinearLayout(context);
         vBox.setOrientation(LinearLayout.VERTICAL);
@@ -231,27 +227,25 @@ public class OfflinePlayerManager {
 
         LinearLayout textLayout = new LinearLayout(context);
         textLayout.setOrientation(LinearLayout.VERTICAL);
-        textLayout.setPadding(30, 0, 0, 0);
+        textLayout.setPadding(20, 0, 0, 0);
         mpTitle = new TextView(context);
-       mpTitle.setText("Not Playing");
+        mpTitle.setText("Not Playing");
         mpTitle.setTextColor(Color.WHITE);
-        mpTitle.setTextSize(16f);
+        mpTitle.setTextSize(14f);
         mpTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        // 🛠️ NAYA FIX: Lamba naam hone par 1 line me rakhega aur end me ... lagayega
         mpTitle.setMaxLines(1);
         mpTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
         
         mpArtist = new TextView(context);
         mpArtist.setText("--");
         mpArtist.setTextColor(Color.parseColor("#888888"));
-        mpArtist.setTextSize(12f);
-        // 🛠️ NAYA FIX: Artist name ke liye bhi same
+        mpArtist.setTextSize(11f);
         mpArtist.setMaxLines(1);
         mpArtist.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        
         textLayout.addView(mpTitle);
         textLayout.addView(mpArtist);
         
-        // 🛠️ FIX: Strict Layout Params for EQ Icon
         DrawnIconBtn eqIcon = new DrawnIconBtn(context, "eq", "#CCFF00");
         eqIcon.setLayoutParams(new LinearLayout.LayoutParams(50, 50));
 
@@ -260,8 +254,8 @@ public class OfflinePlayerManager {
         infoRow.addView(eqIcon);
 
         waveformSeekBar = new WaveformSeekBar(context);
-        LinearLayout.LayoutParams waveParams = new LinearLayout.LayoutParams(-1, 60);
-        waveParams.setMargins(0, 30, 0, 10);
+        LinearLayout.LayoutParams waveParams = new LinearLayout.LayoutParams(-1, 50);
+        waveParams.setMargins(0, 20, 0, 5);
 
         LinearLayout timeRow = new LinearLayout(context);
         timeRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -288,10 +282,10 @@ public class OfflinePlayerManager {
         btnPrev.setOnClickListener(v -> playPrev());
         btnNext.setOnClickListener(v -> playNext());
 
-        LinearLayout.LayoutParams cParams = new LinearLayout.LayoutParams(0, 100, 1.0f);
+        LinearLayout.LayoutParams cParams = new LinearLayout.LayoutParams(0, 60, 1.0f);
         controlsRow.addView(btnShuffle, cParams);
         controlsRow.addView(btnPrev, cParams);
-        controlsRow.addView(btnPlayPause, new LinearLayout.LayoutParams(140, 140)); 
+        controlsRow.addView(btnPlayPause, new LinearLayout.LayoutParams(110, 110)); 
         controlsRow.addView(btnNext, cParams);
         controlsRow.addView(btnRepeat, cParams);
 
@@ -315,36 +309,36 @@ public class OfflinePlayerManager {
                     
                     GradientDrawable bg = new GradientDrawable();
                     bg.setColor(Color.parseColor("#111111")); 
-                    bg.setCornerRadius(40f);
+                    bg.setCornerRadius(30f);
                     row.setBackground(bg);
-                    row.setPadding(30, 20, 20, 20);
+                    row.setPadding(20, 15, 15, 15);
                     
                     LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
-                    rp.setMargins(0, 0, 0, 25);
+                    rp.setMargins(0, 0, 0, 20);
                     row.setLayoutParams(rp);
 
                     FrameLayout artBox = new FrameLayout(context);
                     GradientDrawable artBg = new GradientDrawable();
                     artBg.setColor(Color.parseColor("#222222"));
-                    artBg.setCornerRadius(20f);
+                    artBg.setCornerRadius(15f);
                     artBox.setBackground(artBg);
-                    artBox.setLayoutParams(new LinearLayout.LayoutParams(110, 110));
+                    artBox.setLayoutParams(new LinearLayout.LayoutParams(90, 90));
 
                     LinearLayout txtBox = new LinearLayout(context);
                     txtBox.setOrientation(LinearLayout.VERTICAL);
-                    txtBox.setPadding(30, 0, 10, 0);
+                    txtBox.setPadding(20, 0, 10, 0);
                     
                     TextView tName = new TextView(context);
                     tName.setId(View.generateViewId());
                     tName.setTextColor(Color.WHITE);
-                    tName.setTextSize(15f);
+                    tName.setTextSize(14f);
                     tName.setMaxLines(1);
                     tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
                     
                     TextView tArtist = new TextView(context);
                     tArtist.setId(View.generateViewId());
                     tArtist.setTextColor(Color.parseColor("#888888"));
-                    tArtist.setTextSize(12f);
+                    tArtist.setTextSize(11f);
                     tArtist.setMaxLines(1);
                     
                     txtBox.addView(tName);
@@ -353,10 +347,10 @@ public class OfflinePlayerManager {
                     TextView tDur = new TextView(context);
                     tDur.setId(View.generateViewId());
                     tDur.setTextColor(Color.parseColor("#888888"));
-                    tDur.setTextSize(12f);
+                    tDur.setTextSize(11f);
                     
                     DrawnIconBtn btnDots = new DrawnIconBtn(context, "dots", "#FFFFFF");
-                    btnDots.setLayoutParams(new LinearLayout.LayoutParams(80, 80));
+                    btnDots.setLayoutParams(new LinearLayout.LayoutParams(50, 50));
 
                     row.addView(artBox);
                     row.addView(txtBox, new LinearLayout.LayoutParams(0, -2, 1.0f));
@@ -527,11 +521,9 @@ public class OfflinePlayerManager {
             .setTitle(track.title)
             .setItems(options, (d, w) -> {
                 if (w == 0) {
-                    if(deckListener != null) deckListener.onLoadToDeck("left", track.uri);
-                    Toast.makeText(context, "Loaded to L Deck 🎧", Toast.LENGTH_SHORT).show();
+                    if(deckListener != null) deckListener.onLoadToDeck("A", track.uri);
                 } else if (w == 1) {
-                    if(deckListener != null) deckListener.onLoadToDeck("right", track.uri);
-                    Toast.makeText(context, "Loaded to R Deck 🎛️", Toast.LENGTH_SHORT).show();
+                    if(deckListener != null) deckListener.onLoadToDeck("B", track.uri);
                 } else if (w == 2) {
                     Set<String> b = new HashSet<>(prefs.getStringSet("BLOCKED_AUDIOS", new HashSet<>()));
                     b.add(String.valueOf(track.id));
@@ -646,11 +638,18 @@ public class OfflinePlayerManager {
             path = new Path();
         }
 
+        // 🛠️ SMART TOUCH FIX: Upar ke transparent wave part me touch ko ignore karo
+        @Override
+        public boolean dispatchTouchEvent(MotionEvent ev) {
+            if (ev.getY() < 60) return false; // ListView ko touch pass ho jayega
+            return super.dispatchTouchEvent(ev);
+        }
+
         @Override
         protected void onDraw(Canvas canvas) {
             int w = getWidth(); int h = getHeight();
             path.reset();
-            path.moveTo(0, 50);
+            path.moveTo(0, 60);
             path.cubicTo(w * 0.25f, 0, w * 0.4f, 80, w * 0.6f, 60);
             path.cubicTo(w * 0.8f, 40, w * 0.9f, 20, w, 40);
             path.lineTo(w, h); path.lineTo(0, h); path.close();
@@ -756,7 +755,7 @@ public class OfflinePlayerManager {
             } else if (type.equals("prev")) {
                 path.moveTo(cx + size, cy - size/1.5f); path.lineTo(cx, cy); path.lineTo(cx + size, cy + size/1.5f); path.close();
                 canvas.drawPath(path, paint);
-                canvas.drawRect(cx - size/1.5f, cy - size/1.5f, cx - size/3f, cy + size/1.5f, paint);
+                canvas.drawRect(cx - size/1.5f, cy - Netlify size/1.5f, cx - size/3f, cy + size/1.5f, paint);
             } else if (type.equals("dots")) {
                 canvas.drawCircle(cx, cy - size/1.2f, size/4f, paint);
                 canvas.drawCircle(cx, cy, size/4f, paint);
