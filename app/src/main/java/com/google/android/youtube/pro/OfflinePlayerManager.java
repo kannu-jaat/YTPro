@@ -19,6 +19,7 @@ import android.os.Looper;
 import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -49,6 +50,7 @@ public class OfflinePlayerManager {
     private WavyMiniPlayer miniPlayer;
     private SharedPreferences prefs;
 
+    // Media & Data
     private MediaPlayer mediaPlayer;
     private ArrayList<AudioTrack> allTracksList;
     private ArrayList<AudioTrack> displayList;
@@ -57,6 +59,7 @@ public class OfflinePlayerManager {
     private boolean isPlaying = false;
     private String currentSortMode = "Recent"; 
 
+    // Mini Player UI
     private TextView mpTitle, mpArtist, tvCurrentTime, tvTotalTime;
     private DrawnIconBtn btnPlayPause;
     private WaveformSeekBar waveformSeekBar;
@@ -91,10 +94,15 @@ public class OfflinePlayerManager {
         mainUI.setBackgroundColor(Color.parseColor("#050505")); 
         mainUI.setVisibility(View.GONE);
 
+        // 🛠️ LINEAR LAYOUT TO PREVENT TOUCH OVERLAP AND OFF-SCREEN PUSH
         LinearLayout verticalLayout = new LinearLayout(context);
         verticalLayout.setOrientation(LinearLayout.VERTICAL);
         verticalLayout.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
-        verticalLayout.setPadding(30, 20, 30, 0);
+
+        // Create a wrapper for top content with padding
+        LinearLayout topContent = new LinearLayout(context);
+        topContent.setOrientation(LinearLayout.VERTICAL);
+        topContent.setPadding(30, 40, 30, 0);
 
         // --- TOP HEADER ---
         LinearLayout header = new LinearLayout(context);
@@ -116,8 +124,9 @@ public class OfflinePlayerManager {
         LinearLayout.LayoutParams tParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
         header.addView(titleBox, tParams);
 
+        // 🛠️ SIZES REDUCED
         DrawnIconBtn btnSettings = new DrawnIconBtn(context, "settings", "#FFFFFF");
-        btnSettings.setLayoutParams(new LinearLayout.LayoutParams(60, 60)); // Chota icon
+        btnSettings.setLayoutParams(new LinearLayout.LayoutParams(60, 60)); 
         btnSettings.setOnClickListener(v -> openSettingsDialog());
         header.addView(btnSettings);
 
@@ -130,12 +139,12 @@ public class OfflinePlayerManager {
         searchBg.setCornerRadius(50f);
         searchBox.setBackground(searchBg);
         searchBox.setPadding(30, 10, 30, 10);
-        LinearLayout.LayoutParams sParams = new LinearLayout.LayoutParams(-1, 100); // Height reduced
+        LinearLayout.LayoutParams sParams = new LinearLayout.LayoutParams(-1, 100);
         sParams.setMargins(0, 30, 0, 30);
         searchBox.setLayoutParams(sParams);
 
         DrawnIconBtn searchIcon = new DrawnIconBtn(context, "search", "#888888");
-        searchIcon.setLayoutParams(new LinearLayout.LayoutParams(50, 50)); // Chota icon
+        searchIcon.setLayoutParams(new LinearLayout.LayoutParams(40, 40));
 
         EditText etSearch = new EditText(context);
         etSearch.setHint("Search audio...");
@@ -149,7 +158,7 @@ public class OfflinePlayerManager {
         etParams.setMargins(20, 0, 20, 0);
 
         DrawnIconBtn filterIcon = new DrawnIconBtn(context, "filter", "#CCFF00");
-        filterIcon.setLayoutParams(new LinearLayout.LayoutParams(50, 50)); // Chota icon
+        filterIcon.setLayoutParams(new LinearLayout.LayoutParams(40, 40));
 
         searchBox.addView(searchIcon);
         searchBox.addView(etSearch, etParams);
@@ -170,46 +179,49 @@ public class OfflinePlayerManager {
         TextView allAudioTxt = new TextView(context);
         allAudioTxt.setText("All Audio");
         allAudioTxt.setTextColor(Color.WHITE);
-        allAudioTxt.setTextSize(16f);
+        allAudioTxt.setTextSize(18f);
         allAudioTxt.setTypeface(null, android.graphics.Typeface.BOLD);
         
         TextView sortTxt = new TextView(context);
         sortTxt.setText("Recently Added ˅");
         sortTxt.setTextColor(Color.parseColor("#CCFF00"));
-        sortTxt.setTextSize(12f);
+        sortTxt.setTextSize(14f);
         sortTxt.setGravity(Gravity.RIGHT);
         sortTxt.setOnClickListener(v -> openSortDialog(sortTxt));
         
         sortHeader.addView(allAudioTxt, new LinearLayout.LayoutParams(0, -2, 1.0f));
         sortHeader.addView(sortTxt);
 
+        topContent.addView(header);
+        topContent.addView(searchBox);
+        topContent.addView(sortHeader);
+        
+        verticalLayout.addView(topContent);
+
         // --- LIST VIEW ---
         listView = new ListView(context);
         listView.setDivider(null);
         listView.setClipToPadding(false);
-        listView.setPadding(0, 0, 0, 450); // Mota bottom padding taaki list aaram se slide ho sake
+        // Set padding bottom 0 because MiniPlayer is now structurally below it
+        listView.setPadding(30, 0, 30, 0); 
         setupListViewAdapter();
-
-        verticalLayout.addView(header);
-        verticalLayout.addView(searchBox);
-        verticalLayout.addView(sortHeader);
+        // Weight 1 forces it to take remaining space but stop at the MiniPlayer
         verticalLayout.addView(listView, new LinearLayout.LayoutParams(-1, 0, 1.0f)); 
-        
+
         // --- WAVY MINI PLAYER ---
         setupWavyMiniPlayer();
+        verticalLayout.addView(miniPlayer); // Placed safely at the bottom
 
         mainUI.addView(verticalLayout);
-        mainUI.addView(miniPlayer);
         parentContainer.addView(mainUI);
     }
 
     private void setupWavyMiniPlayer() {
         miniPlayer = new WavyMiniPlayer(context);
-        // WRAP_CONTENT se button bahar nahi bhagenge
-        FrameLayout.LayoutParams mParams = new FrameLayout.LayoutParams(-1, FrameLayout.LayoutParams.WRAP_CONTENT); 
-        mParams.gravity = Gravity.BOTTOM;
+        // Use WRAP_CONTENT so it takes exactly what it needs without pushing off screen
+        LinearLayout.LayoutParams mParams = new LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT);
         miniPlayer.setLayoutParams(mParams);
-        miniPlayer.setPadding(30, 80, 30, 30); // Top padding wave ke hisaab se
+        miniPlayer.setPadding(30, 50, 30, 20); // Top padding for wave drawing
 
         LinearLayout vBox = new LinearLayout(context);
         vBox.setOrientation(LinearLayout.VERTICAL);
@@ -221,27 +233,29 @@ public class OfflinePlayerManager {
         FrameLayout artBox = new FrameLayout(context);
         GradientDrawable artBg = new GradientDrawable();
         artBg.setColor(Color.parseColor("#222222"));
-        artBg.setCornerRadius(20f);
+        artBg.setCornerRadius(15f);
         artBox.setBackground(artBg);
-        artBox.setLayoutParams(new LinearLayout.LayoutParams(90, 90));
+        artBox.setLayoutParams(new LinearLayout.LayoutParams(80, 80));
 
         LinearLayout textLayout = new LinearLayout(context);
         textLayout.setOrientation(LinearLayout.VERTICAL);
         textLayout.setPadding(20, 0, 0, 0);
+        
         mpTitle = new TextView(context);
         mpTitle.setText("Not Playing");
         mpTitle.setTextColor(Color.WHITE);
-        mpTitle.setTextSize(14f);
+        mpTitle.setTextSize(15f);
         mpTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        // 🛠️ TEXT OVERFLOW FIX
         mpTitle.setMaxLines(1);
-        mpTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        mpTitle.setEllipsize(TextUtils.TruncateAt.END);
         
         mpArtist = new TextView(context);
         mpArtist.setText("--");
         mpArtist.setTextColor(Color.parseColor("#888888"));
         mpArtist.setTextSize(11f);
         mpArtist.setMaxLines(1);
-        mpArtist.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        mpArtist.setEllipsize(TextUtils.TruncateAt.END);
         
         textLayout.addView(mpTitle);
         textLayout.addView(mpArtist);
@@ -255,7 +269,7 @@ public class OfflinePlayerManager {
 
         waveformSeekBar = new WaveformSeekBar(context);
         LinearLayout.LayoutParams waveParams = new LinearLayout.LayoutParams(-1, 50);
-        waveParams.setMargins(0, 20, 0, 5);
+        waveParams.setMargins(0, 15, 0, 5);
 
         LinearLayout timeRow = new LinearLayout(context);
         timeRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -267,8 +281,9 @@ public class OfflinePlayerManager {
         LinearLayout controlsRow = new LinearLayout(context);
         controlsRow.setOrientation(LinearLayout.HORIZONTAL);
         controlsRow.setGravity(Gravity.CENTER);
-        controlsRow.setPadding(0, 10, 0, 0);
+        controlsRow.setPadding(0, 5, 0, 0);
 
+        // 🛠️ SMALLER CONTROL ICONS
         DrawnIconBtn btnShuffle = new DrawnIconBtn(context, "shuffle", "#CCFF00");
         DrawnIconBtn btnPrev = new DrawnIconBtn(context, "prev", "#FFFFFF");
         
@@ -282,10 +297,10 @@ public class OfflinePlayerManager {
         btnPrev.setOnClickListener(v -> playPrev());
         btnNext.setOnClickListener(v -> playNext());
 
-        LinearLayout.LayoutParams cParams = new LinearLayout.LayoutParams(0, 60, 1.0f);
+        LinearLayout.LayoutParams cParams = new LinearLayout.LayoutParams(0, 70, 1.0f);
         controlsRow.addView(btnShuffle, cParams);
         controlsRow.addView(btnPrev, cParams);
-        controlsRow.addView(btnPlayPause, new LinearLayout.LayoutParams(110, 110)); 
+        controlsRow.addView(btnPlayPause, new LinearLayout.LayoutParams(90, 90)); 
         controlsRow.addView(btnNext, cParams);
         controlsRow.addView(btnRepeat, cParams);
 
@@ -311,7 +326,7 @@ public class OfflinePlayerManager {
                     bg.setColor(Color.parseColor("#111111")); 
                     bg.setCornerRadius(30f);
                     row.setBackground(bg);
-                    row.setPadding(20, 15, 15, 15);
+                    row.setPadding(25, 20, 15, 20);
                     
                     LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
                     rp.setMargins(0, 0, 0, 20);
@@ -326,20 +341,22 @@ public class OfflinePlayerManager {
 
                     LinearLayout txtBox = new LinearLayout(context);
                     txtBox.setOrientation(LinearLayout.VERTICAL);
-                    txtBox.setPadding(20, 0, 10, 0);
+                    txtBox.setPadding(25, 0, 10, 0);
                     
                     TextView tName = new TextView(context);
                     tName.setId(View.generateViewId());
                     tName.setTextColor(Color.WHITE);
                     tName.setTextSize(14f);
+                    // 🛠️ TEXT OVERFLOW FIX FOR LIST
                     tName.setMaxLines(1);
-                    tName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    tName.setEllipsize(TextUtils.TruncateAt.END);
                     
                     TextView tArtist = new TextView(context);
                     tArtist.setId(View.generateViewId());
                     tArtist.setTextColor(Color.parseColor("#888888"));
                     tArtist.setTextSize(11f);
                     tArtist.setMaxLines(1);
+                    tArtist.setEllipsize(TextUtils.TruncateAt.END);
                     
                     txtBox.addView(tName);
                     txtBox.addView(tArtist);
@@ -350,7 +367,7 @@ public class OfflinePlayerManager {
                     tDur.setTextSize(11f);
                     
                     DrawnIconBtn btnDots = new DrawnIconBtn(context, "dots", "#FFFFFF");
-                    btnDots.setLayoutParams(new LinearLayout.LayoutParams(50, 50));
+                    btnDots.setLayoutParams(new LinearLayout.LayoutParams(60, 60));
 
                     row.addView(artBox);
                     row.addView(txtBox, new LinearLayout.LayoutParams(0, -2, 1.0f));
@@ -638,20 +655,13 @@ public class OfflinePlayerManager {
             path = new Path();
         }
 
-        // 🛠️ SMART TOUCH FIX: Upar ke transparent wave part me touch ko ignore karo
-        @Override
-        public boolean dispatchTouchEvent(MotionEvent ev) {
-            if (ev.getY() < 60) return false; // ListView ko touch pass ho jayega
-            return super.dispatchTouchEvent(ev);
-        }
-
         @Override
         protected void onDraw(Canvas canvas) {
             int w = getWidth(); int h = getHeight();
             path.reset();
-            path.moveTo(0, 60);
-            path.cubicTo(w * 0.25f, 0, w * 0.4f, 80, w * 0.6f, 60);
-            path.cubicTo(w * 0.8f, 40, w * 0.9f, 20, w, 40);
+            path.moveTo(0, 30);
+            path.cubicTo(w * 0.25f, 0, w * 0.4f, 50, w * 0.6f, 40);
+            path.cubicTo(w * 0.8f, 25, w * 0.9f, 10, w, 25);
             path.lineTo(w, h); path.lineTo(0, h); path.close();
 
             canvas.drawPath(path, paint);
@@ -669,16 +679,16 @@ public class OfflinePlayerManager {
             super(context);
             paintPlayed = new Paint(Paint.ANTI_ALIAS_FLAG);
             paintPlayed.setColor(Color.parseColor("#CCFF00")); 
-            paintPlayed.setStrokeWidth(6f);
+            paintPlayed.setStrokeWidth(4f);
             paintPlayed.setStrokeCap(Paint.Cap.ROUND);
 
             paintUnplayed = new Paint(Paint.ANTI_ALIAS_FLAG);
             paintUnplayed.setColor(Color.parseColor("#444444")); 
-            paintUnplayed.setStrokeWidth(6f);
+            paintUnplayed.setStrokeWidth(4f);
             paintUnplayed.setStrokeCap(Paint.Cap.ROUND);
 
-            randomHeights = new float[50];
-            for(int i=0; i<50; i++) randomHeights[i] = (float)(Math.random() * 0.8 + 0.2); 
+            randomHeights = new float[60];
+            for(int i=0; i<60; i++) randomHeights[i] = (float)(Math.random() * 0.8 + 0.2); 
             
             setOnTouchListener((v, e) -> {
                 if(mediaPlayer != null && (e.getAction() == MotionEvent.ACTION_DOWN || e.getAction() == MotionEvent.ACTION_MOVE)) {
@@ -697,7 +707,7 @@ public class OfflinePlayerManager {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            int w = getWidth(); int h = getHeight(); int bars = 50;
+            int w = getWidth(); int h = getHeight(); int bars = 60;
             float spacing = w / (float)bars; int cy = h / 2;
 
             for (int i = 0; i < bars; i++) {
@@ -737,8 +747,8 @@ public class OfflinePlayerManager {
 
             if (drawCircle) {
                 Paint circleP = new Paint(Paint.ANTI_ALIAS_FLAG);
-                circleP.setColor(paint.getColor()); circleP.setStyle(Paint.Style.STROKE); circleP.setStrokeWidth(4f);
-                canvas.drawCircle(cx, cy, Math.min(w,h)/2f - 5f, circleP);
+                circleP.setColor(paint.getColor()); circleP.setStyle(Paint.Style.STROKE); circleP.setStrokeWidth(3f);
+                canvas.drawCircle(cx, cy, Math.min(w,h)/2f - 4f, circleP);
             }
 
             Path path = new Path();
@@ -755,13 +765,13 @@ public class OfflinePlayerManager {
             } else if (type.equals("prev")) {
                 path.moveTo(cx + size, cy - size/1.5f); path.lineTo(cx, cy); path.lineTo(cx + size, cy + size/1.5f); path.close();
                 canvas.drawPath(path, paint);
-                canvas.drawRect(cx - size/1.5f, cy - Netlify size/1.5f, cx - size/3f, cy + size/1.5f, paint);
+                canvas.drawRect(cx - size/1.5f, cy - size/1.5f, cx - size/3f, cy + size/1.5f, paint);
             } else if (type.equals("dots")) {
                 canvas.drawCircle(cx, cy - size/1.2f, size/4f, paint);
                 canvas.drawCircle(cx, cy, size/4f, paint);
                 canvas.drawCircle(cx, cy + size/1.2f, size/4f, paint);
             } else if (type.equals("settings")) {
-                paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(5f);
+                paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(4f);
                 canvas.drawCircle(cx, cy, size/1.5f, paint);
                 for(int i=0; i<8; i++) {
                     canvas.drawLine(cx, cy - size/1.2f, cx, cy - size*1.2f, paint);
@@ -769,24 +779,24 @@ public class OfflinePlayerManager {
                 }
                 paint.setStyle(Paint.Style.FILL);
             } else if (type.equals("search")) {
-                paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(5f);
+                paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(4f);
                 canvas.drawCircle(cx - size/4f, cy - size/4f, size/1.5f, paint);
                 canvas.drawLine(cx + size/4f, cy + size/4f, cx + size, cy + size, paint);
                 paint.setStyle(Paint.Style.FILL);
             } else if (type.equals("filter")) {
-                paint.setStrokeWidth(4f);
+                paint.setStrokeWidth(3f);
                 canvas.drawLine(cx - size, cy - size/2f, cx + size, cy - size/2f, paint);
-                canvas.drawCircle(cx - size/2f, cy - size/2f, size/3f, paint);
+                canvas.drawCircle(cx - size/2f, cy - size/2f, size/4f, paint);
                 canvas.drawLine(cx - size, cy + size/2f, cx + size, cy + size/2f, paint);
-                canvas.drawCircle(cx + size/2f, cy + size/2f, size/3f, paint);
+                canvas.drawCircle(cx + size/2f, cy + size/2f, size/4f, paint);
             } else if (type.equals("eq")) { 
-                paint.setStrokeWidth(6f); paint.setStrokeCap(Paint.Cap.ROUND);
+                paint.setStrokeWidth(5f); paint.setStrokeCap(Paint.Cap.ROUND);
                 canvas.drawLine(cx - size/1.5f, cy + size, cx - size/1.5f, cy + size/3f, paint);
                 canvas.drawLine(cx, cy + size, cx, cy - size/1.5f, paint);
                 canvas.drawLine(cx + size/1.5f, cy + size, cx + size/1.5f, cy, paint);
             } else if (type.equals("shuffle") || type.equals("repeat")) {
-                paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(4f);
-                canvas.drawRoundRect(new RectF(cx - size, cy - size/2f, cx + size, cy + size/2f), 10, 10, paint);
+                paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(3f);
+                canvas.drawRoundRect(new RectF(cx - size, cy - size/2f, cx + size, cy + size/2f), 8, 8, paint);
                 paint.setStyle(Paint.Style.FILL);
             }
         }
