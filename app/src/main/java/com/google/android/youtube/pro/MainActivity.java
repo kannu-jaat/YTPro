@@ -265,15 +265,18 @@ public class MainActivity extends Activity {
                 String deckId = ("left".equalsIgnoreCase(deck) || "A".equalsIgnoreCase(deck)) ? "A" : "B";
                 Toast.makeText(MainActivity.this, "Loading to Local Deck " + deckId, Toast.LENGTH_SHORT).show();
                 
-                // 🛠️ EXACT HTML MATCHING SCRIPT: Targets window.localPlayers.A / B directly
+                // 🛠️ FINAL FIX: Removed 'window.' because 'let' variables are not attached to window object in JS
                 String js = "try { " +
-                            "  if (window.localPlayers && window.localPlayers['" + deckId + "']) { " +
-                            "    window.localPlayers['" + deckId + "'].src = '" + fileUri.toString() + "'; " +
-                            "    document.getElementById('fileName" + deckId + "').textContent = 'Track Loaded via App 🎵'; " +
-                            "    window.localPlayers['" + deckId + "'].load(); " +
-                            "    document.getElementById('playBtn" + deckId + "').style.display = 'block'; " +
-                            "    document.getElementById('pauseBtn" + deckId + "').style.display = 'none'; " +
-                            "  } else { alert('Local Player " + deckId + " not found in HTML!'); } " +
+                            "  if (typeof localPlayers !== 'undefined' && localPlayers['" + deckId + "']) { " +
+                            "    localPlayers['" + deckId + "'].src = '" + fileUri.toString() + "'; " +
+                            "    var nameLabel = document.getElementById('fileName" + deckId + "'); " +
+                            "    if(nameLabel) nameLabel.textContent = 'Track Loaded via App 🎵'; " +
+                            "    localPlayers['" + deckId + "'].load(); " +
+                            "    var playBtn = document.getElementById('playBtn" + deckId + "'); " +
+                            "    if(playBtn) playBtn.style.display = 'inline-block'; " +
+                            "    var pauseBtn = document.getElementById('pauseBtn" + deckId + "'); " +
+                            "    if(pauseBtn) pauseBtn.style.display = 'none'; " +
+                            "  } else { alert('Variable localPlayers nahi mila! HTML check karo.'); } " +
                             "} catch(e) { console.log('Deck Load Error: ' + e); }";
                 web.evaluateJavascript(js, null);
             }
