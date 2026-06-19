@@ -259,7 +259,7 @@ public class MainActivity extends Activity {
 
         ytWrapper.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
 
-        // 🎵 Initialize the Premium Offline Player (The Hijacker)
+        // 📣💽🎵 Initialize the Premium Offline Player (The Hijacker)
         offlinePlayer = new OfflinePlayerManager(this, contentContainer, new OfflinePlayerManager.DJDeckListener() {
             @Override
             public void onLoadToDeck(String deck, Uri fileUri) {
@@ -269,17 +269,20 @@ public class MainActivity extends Activity {
                 // 1. Gaane ko secret variable me dalo
                 pendingAutoInjectUri = fileUri;
                 
-                // 2. JavaScript se HTML wale <input type="file"> ko fake click maaro! 
-                // Ye click direct openCustomAudioPopup ko jagayega aur gaana inject ho jayega.
-                String js = "document.getElementById('fileInput" + deckId + "').click();";
+                // 2. 🛠️ SHORT FIX: File input ko click karo, aur 0.8s baad player ko zabardasti load karwao!
+                String js = "document.getElementById('fileInput" + deckId + "').click(); " +
+                            "setTimeout(function() { " +
+                            "  if (window.localPlayers && window.localPlayers['" + deckId + "']) { " +
+                            "    window.localPlayers['" + deckId + "'].load(); " +  // Audio ko buffer karne ka jhatka
+                            "  } " +
+                            "}, 800);"; 
                 web.evaluateJavascript(js, null);
                 
-                // Optional: Gaana load hote hi Lite Player hide karke YT screen dikhani ho toh:
+                // (Optional) Agar deck pe load hote hi YT screen par aana hai:
                 // offlinePlayer.toggleVisibility();
-                // ytHomeWeb.setVisibility(View.VISIBLE);
-                // btnOfflineToggle.setText("🎵 LOCAL");
             }
         });
+
         // 🔄 Switch Between YT and Offline Player
         btnOfflineToggle.setOnClickListener(v -> {
             if (offlinePlayer != null) {
