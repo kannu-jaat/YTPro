@@ -257,28 +257,50 @@ public class MainActivity extends Activity {
 
         ytWrapper.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
 
-        // 🎵 Initialize the Premium Offline Player
+        // 🎵 Initialize the Premium Offline Player (THE PROGRAMMATIC HIJACK SOLUTION!)
         offlinePlayer = new OfflinePlayerManager(this, contentContainer, new OfflinePlayerManager.DJDeckListener() {
             @Override
             public void onLoadToDeck(String deck, Uri fileUri) {
-                // Determine A or B
-                String deckId = ("left".equalsIgnoreCase(deck) || "A".equalsIgnoreCase(deck)) ? "A" : "B";
+                final String deckId = ("left".equalsIgnoreCase(deck) || "A".equalsIgnoreCase(deck)) ? "A" : "B";
                 Toast.makeText(MainActivity.this, "Loading to Local Deck " + deckId, Toast.LENGTH_SHORT).show();
                 
-                // 🛠️ FINAL FIX: Removed 'window.' because 'let' variables are not attached to window object in JS
-                String js = "try { " +
-                            "  if (typeof localPlayers !== 'undefined' && localPlayers['" + deckId + "']) { " +
-                            "    localPlayers['" + deckId + "'].src = '" + fileUri.toString() + "'; " +
-                            "    var nameLabel = document.getElementById('fileName" + deckId + "'); " +
-                            "    if(nameLabel) nameLabel.textContent = 'Track Loaded via App 🎵'; " +
-                            "    localPlayers['" + deckId + "'].load(); " +
-                            "    var playBtn = document.getElementById('playBtn" + deckId + "'); " +
-                            "    if(playBtn) playBtn.style.display = 'inline-block'; " +
-                            "    var pauseBtn = document.getElementById('pauseBtn" + deckId + "'); " +
-                            "    if(pauseBtn) pauseBtn.style.display = 'none'; " +
-                            "  } else { alert('Variable localPlayers nahi mila! HTML check karo.'); } " +
-                            "} catch(e) { console.log('Deck Load Error: ' + e); }";
-                web.evaluateJavascript(js, null);
+                // Step 1: Pehle HTML ke Choose File button ko trigger karo taaki purana callback clear ya active ho sake
+                String targetInputId = "fileInput" + deckId;
+                String triggerClickJs = "try { " +
+                                        "  var btn = document.getElementById('" + targetInputId + "'); " +
+                                        "  if(btn) { btn.click(); } " +
+                                        "} catch(e) { console.log(e); }";
+                web.evaluateJavascript(triggerClickJs, null);
+
+                // Step 2: Android ke WebChromeClient ka use karke direct file manager bypass karo aur Uri pass kar do
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            // Agar aapki webview me openFileChooser ya onShowFileChooser ka callback saved hai,
+                            // toh hum use direct fileUri[] array bhej sakte hain.
+                            // Par sabse clean aur safe rasta jo aapne bataya, hum seedhe input element ka filename text aur src update karwa ke play trigger karwa denge.
+                            
+                            String directInjectJs = "try { " +
+                                                    "  if (typeof localPlayers !== 'undefined' && localPlayers['" + deckId + "']) { " +
+                                                    "    var blobUrl = '" + fileUri.toString() + "'; " +
+                                                    "    localPlayers['" + deckId + "'].src = blobUrl; " +
+                                                    "    var nameLabel = document.getElementById('fileName" + deckId + "'); " +
+                                                    "    if(nameLabel) nameLabel.textContent = 'Loaded: Local Track 🎵'; " +
+                                                    "    localPlayers['" + deckId + "'].load(); " +
+                                                    "    setTimeout(function() { " +
+                                                    "       var playBtn = document.getElementById('playBtn" + deckId + "'); " +
+                                                    "       if(playBtn) { playBtn.click(); } " + // Programmatic HTML click to sync UI meters
+                                                    "    }, 300); " +
+                                                    "  } " +
+                                                    "} catch(e) { console.log('Hijack Error: ' + e); }";
+                                                    
+                            web.evaluateJavascript(directInjectJs, null);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
             }
         });
 
