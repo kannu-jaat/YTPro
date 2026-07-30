@@ -1,13 +1,25 @@
-<LinearLayout
-	xmlns:android="http://schemas.android.com/apk/res/android"
-	xmlns:app="http://schemas.android.com/apk/res-auto"
-	xmlns:tools="http://schemas.android.com/tools"
-	android:layout_width="match_parent"
-	android:layout_height="match_parent"
-	android:orientation="vertical"
-	android:fitsSystemWindows="true">
-	<com.google.android.youtube.pro.webview.YTProWebView
-		android:id="@+id/web"
-		android:layout_width="match_parent"
-		android:layout_height="match_parent"/>
-</LinearLayout>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true">
+
+    <!-- Tumhara Main DJ WebView -->
+    <com.google.android.youtube.pro.webview.YTProWebView
+        android:id="@+id/web"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
+
+    <!-- 🌐 No Internet GIF (Top Right Corner me float karega) -->
+    <ImageView
+        android:id="@+id/noInternetGif"
+        android:layout_width="35dp"
+        android:layout_height="35dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp"
+        android:visibility="gone" />
+
+</FrameLayout>
