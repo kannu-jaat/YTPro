@@ -31,6 +31,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView; // 🌐 NAYA IMPORT
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -57,8 +58,14 @@ public class MainActivity extends Activity {
     public boolean mediaSession = false;
     public boolean isPip = false;
     public boolean dL = false;
-// 🕵️ SECRET HIJACK VARIABLE
+    
+    // 🕵️ SECRET HIJACK VARIABLE
     public Uri pendingAutoInjectUri = null;
+
+    // 🌐 Internet Checker Variables
+    private ImageView noInternetGif;
+    private android.os.Handler internetHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable internetCheckerRunnable;
 
     private YTProWebView web; 
     private YTProWebView ytHomeWeb; 
@@ -108,7 +115,60 @@ public class MainActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
         setupYTSessionManager();
-        setupDynamicLayout();
+        setupDynamicLayout(); // Yahan XML ke bina programmatically views bante hain
+
+        // 🌐 Internet Checker Logic Started
+        try {
+            // Glide use karke GIF load kar rahe hain
+            com.bumptech.glide.Glide.with(this)
+                    .asGif()
+                    .load(R.drawable.no_internet)
+                    .into(noInternetGif);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        internetCheckerRunnable = new Runnable() {
+            @Override
+            public void run() {
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        boolean hasRealInternet = false;
+                        try {
+                            // Google server ping for active balance/internet check
+                            java.net.Socket socket = new java.net.Socket();
+                            java.net.SocketAddress socketAddress = new java.net.InetSocketAddress("8.8.8.8", 53);
+                            socket.connect(socketAddress, 1500); // 1.5s timeout
+                            socket.close();
+                            hasRealInternet = true;
+                        } catch (java.io.IOException e) {
+                            hasRealInternet = false;
+                        }
+
+                        final boolean finalHasInternet = hasRealInternet;
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (noInternetGif != null) {
+                                    if (finalHasInternet) {
+                                        if (noInternetGif.getVisibility() != View.GONE) {
+                                            noInternetGif.setVisibility(View.GONE);
+                                        }
+                                    } else {
+                                        if (noInternetGif.getVisibility() != View.VISIBLE) {
+                                            noInternetGif.setVisibility(View.VISIBLE);
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }).start();
+                internetHandler.postDelayed(this, 3000);
+            }
+        };
+        internetHandler.post(internetCheckerRunnable);
 
         if (Build.VERSION.SDK_INT >= 33) {
             if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -255,6 +315,20 @@ public class MainActivity extends Activity {
         ytWrapper.addView(cornerHandle, cParams);
 
         rootContainer.addView(ytWrapper);
+
+        // 🌐 NO INTERNET GIF PROGRAMMATIC CREATION
+        noInternetGif = new ImageView(this);
+        FrameLayout.LayoutParams gifParams = new FrameLayout.LayoutParams(
+                (int) (35 * getResources().getDisplayMetrics().density), // 35dp Width
+                (int) (35 * getResources().getDisplayMetrics().density)  // 35dp Height
+        );
+        gifParams.gravity = android.view.Gravity.TOP | android.view.Gravity.RIGHT;
+        gifParams.topMargin = (int) (16 * getResources().getDisplayMetrics().density);
+        gifParams.rightMargin = (int) (16 * getResources().getDisplayMetrics().density);
+        noInternetGif.setLayoutParams(gifParams);
+        noInternetGif.setVisibility(View.GONE); // Default Hide
+        rootContainer.addView(noInternetGif); // Added overlay on top of everything
+
         setContentView(rootContainer);
 
         ytWrapper.setVisibility(isYtVisible ? View.VISIBLE : View.GONE);
@@ -273,13 +347,10 @@ public class MainActivity extends Activity {
                 String js = "document.getElementById('fileInput" + deckId + "').click(); " +
                             "setTimeout(function() { " +
                             "  if (window.localPlayers && window.localPlayers['" + deckId + "']) { " +
-                            "    window.localPlayers['" + deckId + "'].load(); " +  // Audio ko buffer karne ka jhatka
+                            "    window.localPlayers['" + deckId + "'].load(); " + 
                             "  } " +
                             "}, 800);"; 
                 web.evaluateJavascript(js, null);
-                
-                // (Optional) Agar deck pe load hote hi YT screen par aana hai:
-                // offlinePlayer.toggleVisibility();
             }
         });
 
@@ -803,6 +874,12 @@ public void openCustomAudioPopup(final ValueCallback<Uri[]> filePathCallback) {
     @Override 
     public void onDestroy() { 
         super.onDestroy(); 
+        
+        // 🌐 INTERNET CHECKER MEMORY CLEANUP
+        if (internetHandler != null && internetCheckerRunnable != null) {
+            internetHandler.removeCallbacks(internetCheckerRunnable);
+        }
+
         stopService(new Intent(getApplicationContext(), ForegroundService.class)); 
         if (broadcastReceiver != null) unregisterReceiver(broadcastReceiver); 
         if (streamManager != null) streamManager.cleanup(); 
