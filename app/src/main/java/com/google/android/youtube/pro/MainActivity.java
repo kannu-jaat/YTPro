@@ -319,12 +319,12 @@ public class MainActivity extends Activity {
         // 🌐 NO INTERNET GIF PROGRAMMATIC CREATION
         noInternetGif = new ImageView(this);
         FrameLayout.LayoutParams gifParams = new FrameLayout.LayoutParams(
-                (int) (35 * getResources().getDisplayMetrics().density), // 35dp Width
-                (int) (35 * getResources().getDisplayMetrics().density)  // 35dp Height
+                (int) (50 * getResources().getDisplayMetrics().density), // 35dp Width
+                (int) (50 * getResources().getDisplayMetrics().density)  // 35dp Height
         );
         gifParams.gravity = android.view.Gravity.TOP | android.view.Gravity.RIGHT;
-        gifParams.topMargin = (int) (16 * getResources().getDisplayMetrics().density);
-        gifParams.rightMargin = (int) (16 * getResources().getDisplayMetrics().density);
+        gifParams.topMargin = (int) (6 * getResources().getDisplayMetrics().density);
+        gifParams.rightMargin = (int) (6 * getResources().getDisplayMetrics().density);
         noInternetGif.setLayoutParams(gifParams);
         noInternetGif.setVisibility(View.GONE); // Default Hide
         rootContainer.addView(noInternetGif); // Added overlay on top of everything
