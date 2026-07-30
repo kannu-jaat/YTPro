@@ -319,8 +319,8 @@ public class MainActivity extends Activity {
         // 🌐 NO INTERNET GIF PROGRAMMATIC CREATION
         noInternetGif = new ImageView(this);
         FrameLayout.LayoutParams gifParams = new FrameLayout.LayoutParams(
-                (int) (50 * getResources().getDisplayMetrics().density), // 35dp Width
-                (int) (50 * getResources().getDisplayMetrics().density)  // 35dp Height
+                (int) (200 * getResources().getDisplayMetrics().density), // 35dp Width
+                (int) (200 * getResources().getDisplayMetrics().density)  // 35dp Height
         );
         gifParams.gravity = android.view.Gravity.TOP | android.view.Gravity.RIGHT;
         gifParams.topMargin = (int) (6 * getResources().getDisplayMetrics().density);
